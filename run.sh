@@ -1,8 +1,8 @@
 # dev run
-  uv run uvicorn src.main:app --reload
+uv run uvicorn src.main:app --reload
 
 # production (background, survives terminal close)
-  pm2 start ecosystem.config.cjs
+pm2 start ecosystem.config.cjs
 
 
 

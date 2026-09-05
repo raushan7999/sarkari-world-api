@@ -44,6 +44,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+        servers=[{"url": config.base_url, "description": config.environment}],
     )
 
     setup_middleware(app, config)

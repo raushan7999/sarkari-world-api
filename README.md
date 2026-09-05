@@ -69,6 +69,18 @@ proxy's address and never leave it open.
 | `/redoc` | ReDoc |
 | `/openapi.json` | OpenAPI 3.1 schema |
 
+### Importing into Postman
+
+**Import → Link → `http://127.0.0.1:8000/openapi.json`.** The spec declares its
+`servers` entry, so the generated collection points at the right host instead
+of guessing; set `BASE_URL` per environment.
+
+The document is **OpenAPI 3.1**, which FastAPI emits by default. Postman's 3.1
+support is newer than its 3.0 support, so on an older Postman version some
+`anyOf` nullable fields and `const` values may import with weaker schema
+detail. Requests, paths, auth and bodies all come through either way — update
+Postman if the schemas look thin.
+
 The spec documents both security schemes (bearer JWT and `X-API-Key`), every
 error status each route can return (401/403/404/409/422) against the real
 `ErrorResponse` shape, and 47 component schemas. Every operation carries a

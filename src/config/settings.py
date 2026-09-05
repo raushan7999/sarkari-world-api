@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     environment: str = "local"
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
+    # Advertised in the OpenAPI document as the server URL, so an imported
+    # Postman/client collection points at the right host instead of guessing.
+    base_url: str = "http://127.0.0.1:8000"
 
     # CORS — comma-separated in the environment, e.g. "http://localhost:3000"
     cors_origins: list[str] = Field(default_factory=list)
