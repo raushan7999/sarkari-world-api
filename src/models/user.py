@@ -38,7 +38,9 @@ class User(Base):
 
     google_id: Mapped[str | None] = mapped_column(Text, unique=True)
     picture_url: Mapped[str | None] = mapped_column(Text)
-    auth_provider: Mapped[str] = mapped_column(Text, default="subscription")
+    # The column default in Postgres is still "subscription" from the old
+    # newsletter era; every row this service writes is "google".
+    auth_provider: Mapped[str] = mapped_column(Text, default="google")
     role: Mapped[UserRole] = mapped_column(
         Enum(
             UserRole,

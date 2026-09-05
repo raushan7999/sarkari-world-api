@@ -16,4 +16,6 @@ API_KEY_TTL_DAYS = 30
 API_KEY_ENTROPY_BYTES = 24
 
 STAFF_ROLES = ("editor", "admin")
-AUTH_PROVIDERS = ("subscription", "google")
+# Google is the only sign-in method. Adding one here is not enough — it also
+# needs a verifier in `services/oauth.py`.
+AUTH_PROVIDERS = ("google",)

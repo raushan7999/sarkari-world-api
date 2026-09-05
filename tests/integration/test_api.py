@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from src.config import settings
 from src.db.session import async_session_factory
@@ -733,3 +733,22 @@ class TestApiKeys:
         assert (
             await api.get(f"{V1}/admin/posts", headers={"X-API-Key": forged})
         ).status_code == 401
+
+
+class TestGoogleOnlyInvariant:
+    """Every account is a Google account. Nothing should reintroduce another."""
+
+    async def test_no_non_google_accounts_remain(self, _database: None) -> None:
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(User.auth_provider, func.count())
+                .where(User.auth_provider != "google")
+                .group_by(User.auth_provider)
+            )
+            assert result.all() == []
+
+    async def test_meta_advertises_google_alone(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        body = (await api.get(f"{V1}/admin/meta", headers=admin_headers)).json()
+        assert body["auth_providers"] == ["google"]

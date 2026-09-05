@@ -17,3 +17,6 @@ wheels/
 
 # Runtime logs
 logs/
+
+# Database backups (may contain personal data)
+backups/
