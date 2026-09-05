@@ -9,8 +9,13 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "asyncpg>=0.31.0",
+    "bcrypt>=5.0.0",
     "fastapi[standard]>=0.141.1",
+    "google-auth>=2.57.1",
+    "markdown-it-py>=4.2.0",
+    "nh3>=0.3.7",
     "pydantic-settings>=2.15.0",
+    "pyjwt>=2.13.0",
     "sqlalchemy[asyncio]>=2.0.52",
     "structlog>=26.1.0",
 ]

@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     db_pool_recycle: int = 1800
     db_pool_timeout: int = 30
     db_echo: bool = False
+    db_timezone: str = "Asia/Kolkata"
 
 
 @lru_cache
