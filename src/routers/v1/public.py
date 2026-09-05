@@ -25,6 +25,7 @@ from src.schemas.article import (
     PublicArticle,
     SearchResponse,
 )
+from src.schemas.common import PUBLIC_RESPONSES
 from src.schemas.pagination import public_page_params
 from src.services import articles
 from src.utils.logger import get_logger
@@ -32,7 +33,7 @@ from src.utils.slugs import category_slug_to_enum
 
 logger = get_logger(__name__)
 
-router = APIRouter(tags=["public"])
+router = APIRouter(tags=["public"], responses=PUBLIC_RESPONSES)
 
 
 @router.get("/category", summary="List categories")

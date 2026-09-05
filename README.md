@@ -16,7 +16,18 @@ cp .env.example .env   # set DATABASE_URL and SESSION_SECRET
 uv run uvicorn src.main:app --reload
 ```
 
-Swagger: `/docs` · ReDoc: `/redoc` · Schema: `/openapi.json`
+## API docs
+
+| URL | What |
+| --- | --- |
+| `/docs` | Swagger UI — has an **Authorize** button; paste a session JWT or an `sw_` API key and every protected endpoint is callable from the page |
+| `/redoc` | ReDoc |
+| `/openapi.json` | OpenAPI 3.1 schema |
+
+The spec documents both security schemes (bearer JWT and `X-API-Key`), every
+error status each route can return (401/403/404/409/422) against the real
+`ErrorResponse` shape, and 47 component schemas. Every operation carries a
+summary, description and typed response model.
 
 ## Checks
 

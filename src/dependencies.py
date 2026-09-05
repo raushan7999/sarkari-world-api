@@ -11,7 +11,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, Request, Security
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.constants.auth import SESSION_COOKIE, STAFF_ROLES
@@ -26,14 +27,32 @@ logger = get_logger(__name__)
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
+# Declared as Security schemes so they appear in the OpenAPI document and
+# Swagger UI renders an Authorize button. `auto_error=False` keeps credential
+# resolution non-raising — the guards below decide what a missing or bad
+# credential means for a given route.
+bearer_scheme = HTTPBearer(
+    scheme_name="Session JWT",
+    description="A session JWT, or an `sw_` API key.",
+    auto_error=False,
+)
+api_key_scheme = APIKeyHeader(
+    name="X-API-Key",
+    scheme_name="API key",
+    description="Server-to-server key issued by the operator CLI.",
+    auto_error=False,
+)
 
-def _bearer_token(request: Request) -> str | None:
-    header = request.headers.get("authorization") or ""
-    scheme, _, value = header.partition(" ")
-    return value.strip() if scheme.lower() == "bearer" and value.strip() else None
+BearerDep = Annotated[HTTPAuthorizationCredentials | None, Security(bearer_scheme)]
+ApiKeyDep = Annotated[str | None, Security(api_key_scheme)]
 
 
-async def current_user(request: Request, session: SessionDep) -> User | None:
+async def current_user(
+    request: Request,
+    session: SessionDep,
+    credentials: BearerDep = None,
+    header_key: ApiKeyDep = None,
+) -> User | None:
     """Resolve the caller from an API key, a session JWT, or nothing.
 
     Priority: API key, then JWT (header or cookie). Never raises — a bad
@@ -41,10 +60,10 @@ async def current_user(request: Request, session: SessionDep) -> User | None:
     The role is re-read from the database on every request, so a promotion or
     demotion takes effect immediately.
     """
-    bearer = _bearer_token(request)
+    bearer = credentials.credentials.strip() if credentials else None
 
     # 1. API key — `X-API-Key: sw_...` or `Authorization: Bearer sw_...`
-    candidate = request.headers.get("x-api-key") or bearer
+    candidate = header_key or bearer
     if api_keys.looks_like_api_key(candidate):
         assert candidate is not None
         user = await api_keys.resolve_api_key(session, candidate)

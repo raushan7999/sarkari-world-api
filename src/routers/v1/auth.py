@@ -17,12 +17,13 @@ from src.schemas.auth import (
     ProvidersResponse,
     SignInResponse,
 )
+from src.schemas.common import PUBLIC_RESPONSES
 from src.services import oauth, tokens, users
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"], responses=PUBLIC_RESPONSES)
 
 
 def _principal(user: User, via: str) -> AuthPrincipal:

@@ -16,6 +16,7 @@ from src.schemas.bookmark import (
     BookmarkToggleRequest,
     BookmarkToggleResponse,
 )
+from src.schemas.common import AUTH_RESPONSES
 from src.schemas.pagination import PublicPage, public_page_params
 from src.services import bookmarks
 from src.utils.logger import get_logger
@@ -24,7 +25,10 @@ from src.utils.slugs import category_enum_to_slug
 logger = get_logger(__name__)
 
 router = APIRouter(
-    prefix="/account", tags=["account"], dependencies=[Depends(require_auth)]
+    prefix="/account",
+    tags=["account"],
+    dependencies=[Depends(require_auth)],
+    responses=AUTH_RESPONSES,
 )
 
 

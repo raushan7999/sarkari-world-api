@@ -10,8 +10,13 @@ from fastapi import APIRouter, Depends
 
 from src.dependencies import require_manage
 from src.routers.v1.admin import analytics, bookmarks, posts, users, web_urls
+from src.schemas.common import ADMIN_RESPONSES
 
-router = APIRouter(prefix="/admin", dependencies=[Depends(require_manage)])
+router = APIRouter(
+    prefix="/admin",
+    dependencies=[Depends(require_manage)],
+    responses=ADMIN_RESPONSES,
+)
 router.include_router(analytics.router)
 router.include_router(posts.router)
 router.include_router(posts.publish_router)
