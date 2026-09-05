@@ -23,6 +23,13 @@ case "${1:-dev}" in
            --proxy-headers \
            --forwarded-allow-ips "${PROXY_IPS:-127.0.0.1}" ;;
 
+  # Background, survives terminal close. PM2 owns the process from here.
+  start)   pm2 start ecosystem.config.cjs && pm2 save ;;
+  restart) pm2 restart sarkariworld-api-py ;;
+  kill)    pm2 stop sarkariworld-api-py && pm2 delete sarkariworld-api-py ;;
+  logs)    pm2 logs sarkariworld-api-py ;;
+  status)  pm2 status ;;
+
   stop)  if pkill -f "uvicorn $APP"; then
            echo "stopped"
          else
@@ -35,5 +42,5 @@ case "${1:-dev}" in
   it)    uv run pytest tests/integration ;;   # needs a database
   check) uv run ruff check . && uv run ruff format --check . && uv run mypy sarkariworld ;;
   fix)   uv run ruff check --fix . && uv run ruff format . ;;
-  *)     echo "usage: ./run.sh [dev|prod|stop|ps|test|it|check|fix]" >&2; exit 1 ;;
+  *)     echo "usage: ./run.sh [dev|prod|start|restart|kill|logs|status|stop|ps|test|it|check|fix]" >&2; exit 1 ;;
 esac

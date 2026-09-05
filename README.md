@@ -13,11 +13,21 @@ cp .env.example .env   # set DATABASE_URL and SESSION_SECRET
 ## Run
 
 ```bash
-./run.sh dev      # development, auto-reloads
-./run.sh prod     # production, 4 workers, no reload
-./run.sh ps       # show running servers
-./run.sh stop     # stop them
+./run.sh dev      # development, auto-reloads (foreground)
+./run.sh prod     # production, foreground — dies when the terminal closes
+./run.sh start    # production under PM2 — survives terminal close
+./run.sh status   # PM2 process list
+./run.sh logs     # tail the PM2 logs
+./run.sh restart  # restart after a deploy
+./run.sh kill     # stop and remove from PM2
 ```
+
+`prod` runs in the foreground as a child of your shell, so closing the terminal
+sends SIGHUP and kills it. Use `start` for anything that needs to stay up: PM2
+owns the process, restarts it if it crashes, and caps memory.
+
+To also survive a reboot, run `pm2 startup` once and follow the sudo command it
+prints, then `pm2 save`.
 
 Both bind `127.0.0.1` by default, so the app is reachable only from this
 machine and the reverse proxy in front of it is what the outside world talks
