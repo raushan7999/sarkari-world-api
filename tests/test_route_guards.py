@@ -90,29 +90,13 @@ async def test_openapi_documents_every_route(client: AsyncClient) -> None:
 
 async def test_docs_can_be_disabled() -> None:
     """`ENABLE_DOCS=false` must take down the spec as well as the UI."""
-    from httpx import ASGITransport, AsyncClient
-
-    from src.config import Settings
-    from src.main import create_app
-
-    config = Settings(enable_docs=False)
-    transport = ASGITransport(app=create_app(config))
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        for path in ("/docs", "/redoc", "/openapi.json"):
+    async with _client_for(Settings(enable_docs=False)) as client:
+        for path in ("/docs", "/openapi.json"):
             assert (await client.get(path)).status_code == 404
-        # The API itself keeps working.
+        # The API itself keeps serving.
         assert (await client.get("/health")).status_code == 200
 
 
-async def test_redoc_can_be_disabled_alone(client: AsyncClient) -> None:
-    from httpx import ASGITransport
-    from httpx import AsyncClient as AC
-
-    from src.config import Settings
-    from src.main import create_app
-
-    transport = ASGITransport(app=create_app(Settings(enable_redoc=False)))
-    async with AC(transport=transport, base_url="http://test") as c:
-        assert (await c.get("/redoc")).status_code == 404
-        assert (await c.get("/docs")).status_code == 200
-        assert (await c.get("/openapi.json")).status_code == 200
+async def test_redoc_is_not_served(client: AsyncClient) -> None:
+    """ReDoc is deliberately not mounted; /docs renders the same document."""
+    assert (await client.get("/redoc")).status_code == 404

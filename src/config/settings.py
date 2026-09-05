@@ -22,10 +22,9 @@ class Settings(BaseSettings):
     # Postman/client collection points at the right host instead of guessing.
     base_url: str = "http://127.0.0.1:8000"
     # Interactive docs. /openapi.json is what Swagger UI fetches, so disabling
-    # it disables /docs too. Turn the whole lot off in production if the API
-    # surface should not be publicly browsable.
+    # it disables /docs too. Turn both off in production if the API surface
+    # should not be publicly browsable.
     enable_docs: bool = True
-    enable_redoc: bool = True
 
     # CORS — comma-separated in the environment, e.g. "http://localhost:3000"
     cors_origins: list[str] = Field(default_factory=list)

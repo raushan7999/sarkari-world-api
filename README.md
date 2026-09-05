@@ -66,17 +66,15 @@ proxy's address and never leave it open.
 | URL | What |
 | --- | --- |
 | `/docs` | Swagger UI — has an **Authorize** button; paste a session JWT or an `sw_` API key and every protected endpoint is callable from the page |
-| `/redoc` | ReDoc |
 | `/openapi.json` | OpenAPI 3.1 schema |
 
 `/openapi.json` is not optional if you want `/docs` — Swagger UI is a
 JavaScript page that fetches the spec, so disabling the spec disables the UI
-with it. `/redoc` is a second rendering of the same document and can be
-dropped on its own.
+with it. ReDoc is deliberately not mounted; it renders the same document
+`/docs` already serves.
 
-`ENABLE_DOCS=false` turns off all three (the API keeps serving); set it in
-production if the surface should not be publicly browsable. `ENABLE_REDOC=false`
-drops only ReDoc.
+`ENABLE_DOCS=false` turns both off (the API keeps serving); set it in
+production if the surface should not be publicly browsable.
 
 ### Importing into Postman
 
