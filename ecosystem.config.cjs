@@ -1,6 +1,9 @@
 /*
  * PM2 process config.
  *
+ * Listens on 127.0.0.1:7700 only. The public entrypoint is the Cloudflare
+ * tunnel (api.sarkariworld.com -> this port); nothing else should reach it.
+ *
  * PM2 runs ONE process here and uvicorn forks its own workers (`WORKERS`).
  * Letting both fork would multiply the count and, more importantly, multiply
  * database connections: each uvicorn worker owns a pool, so total connections
@@ -20,7 +23,7 @@ module.exports = {
 			args: [
 				"src.main:app",
 				"--host", "127.0.0.1",
-				"--port", "8000",
+				"--port", "7700",
 				"--workers", "4",
 				"--proxy-headers",
 				"--forwarded-allow-ips", "127.0.0.1",

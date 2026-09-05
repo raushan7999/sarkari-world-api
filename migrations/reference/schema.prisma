@@ -1,0 +1,244 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["partialIndexes", "postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [fuzzystrmatch, pg_trgm]
+}
+
+enum ArticleCategory {
+  latest_job
+  admit_card
+  result
+  answer_key
+  admission
+  syllabus
+  scholarship
+  tender
+  sarkari_website
+  sarkari_mobile_app
+  blog
+}
+
+enum ArticleStatus {
+  draft
+  published
+  archived
+}
+
+enum UserRole {
+  user
+  editor
+  admin
+}
+
+enum SearchQueryStatus {
+  pending
+  progress
+  done
+}
+
+enum CrawlRunStatus {
+  running
+  success
+  failed
+}
+
+enum StateName {
+  andhra_pradesh
+  arunachal_pradesh
+  assam
+  bihar
+  chhattisgarh
+  goa
+  gujarat
+  haryana
+  himachal_pradesh
+  jharkhand
+  karnataka
+  kerala
+  madhya_pradesh
+  maharashtra
+  manipur
+  meghalaya
+  mizoram
+  nagaland
+  odisha
+  punjab
+  rajasthan
+  sikkim
+  tamil_nadu
+  telangana
+  tripura
+  uttar_pradesh
+  uttarakhand
+  west_bengal
+  andaman_and_nicobar_islands
+  chandigarh
+  dadra_and_nagar_haveli_and_daman_and_diu
+  delhi
+  jammu_and_kashmir
+  ladakh
+  lakshadweep
+  puducherry
+}
+
+model Article {
+  id                  Int                      @id @default(autoincrement())
+  title               String                   @default("Untitled")
+  description         String                   @default("")
+  slug                String                   @unique
+  category            ArticleCategory          @default(blog)
+  html_content        String                   @default("")
+  article_status      ArticleStatus            @default(draft)
+  published_at        DateTime?
+  created_at          DateTime                 @default(now())
+  updated_at          DateTime                 @default(now())
+  author_id           String?
+  author_name         String?
+  instagram_post_url  Json                     @default("[]")
+  youtube_video_url   Json                     @default("[]")
+  faq                 Json                     @default("[]")
+  cover_image_url     String?
+  links               Json                     @default("[]")
+  search_keyword      String[]                 @default([])
+  meta_title          String?                  @db.VarChar(60)
+  meta_description    String?                  @db.VarChar(160)
+  title_search        Unsupported("tsvector")? @default(dbgenerated("to_tsvector('simple'::regconfig, COALESCE(title, ''::text))"))
+  title_normalized    String?                  @default(dbgenerated("lower(regexp_replace(COALESCE(title, ''::text), '[^a-zA-Z0-9 ]+'::text, ' '::text, 'g'::text))")) @ignore
+
+  @@index([article_status, category, published_at(sort: Desc)])
+  @@index([published_at])
+  @@index([created_at(sort: Desc)])
+  @@index([updated_at(sort: Desc)])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([search_keyword], map: "Article_search_keyword_gin_idx", type: Gin)
+  @@index([created_at(sort: Desc)], map: "Article_published_created_at_idx", where: raw("(article_status = 'published'::\"ArticleStatus\")"))
+  @@index([category, created_at(sort: Desc)], map: "Article_status_category_created_at_idx", where: raw("(article_status = 'published'::\"ArticleStatus\")"))
+  @@index([title_normalized(ops: raw("gin_trgm_ops"))], map: "Article_title_normalized_trgm_idx", type: Gin)
+  @@index([title_search], type: Gin)
+}
+
+model User {
+  id                            Int        @id @default(autoincrement())
+  name                          String     @db.VarChar(100)
+  email                         String     @unique @db.VarChar(255)
+  other_email                   String?    @unique @db.VarChar(255)
+  mobile                        String?    @db.VarChar(10)
+  other_mobile                  String?    @db.VarChar(10)
+  city                          String?    @db.VarChar(100)
+  district                      String?    @db.VarChar(100)
+  state                         StateName?
+  pin                           String?    @db.Char(6)
+  address                       String?    @db.VarChar(500)
+  google_id                     String?    @unique
+  picture_url                   String?
+  auth_provider                 String     @default("subscription")
+  role                          UserRole   @default(user)
+  api_key                       String?    @unique
+  api_key_prefix                String?    @unique
+  api_key_hash                  String?
+  api_key_name                  String?
+  api_key_created_at            DateTime?
+  api_key_last_used_at          DateTime?
+  api_key_revoked_at            DateTime?
+  last_login_at                 DateTime?
+  session_invalidated_at        DateTime?  @db.Timestamptz(6)
+  created_at                    DateTime   @default(now())
+  updated_at                    DateTime   @default(now())
+
+  @@index([mobile])
+  @@index([created_at(sort: Desc)])
+  @@index([last_login_at(sort: Desc)])
+  @@index([email(ops: raw("gin_trgm_ops"))], map: "User_email_trgm_idx", type: Gin)
+  @@index([name(ops: raw("gin_trgm_ops"))], map: "User_name_trgm_idx", type: Gin)
+}
+
+
+model Bookmark {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  article_id Int
+  created_at DateTime @default(now())
+
+  @@unique([user_id, article_id], map: "Bookmark_user_article_unique")
+  @@index([user_id, created_at(sort: Desc)])
+}
+
+model SarkariWebsite {
+  id              Int                 @id @default(autoincrement())
+  url             String              @unique
+  title           String              @default("")
+  description     String              @default("")
+  priority        Int                 @default(0)
+  last_crawl_date DateTime            @default(dbgenerated("(CURRENT_DATE - '7 days'::interval)")) @db.Date
+  is_active       Boolean             @default(true)
+  created_at      DateTime            @default(now()) @db.Timestamp(6)
+  updated_at      DateTime            @default(now()) @db.Timestamp(6)
+  queries         GoogleSearchQuery[]
+
+  @@index([is_active])
+  @@index([priority(sort: Desc)])
+}
+
+model SearchKeywordGroup {
+  id           Int                 @id @default(autoincrement())
+  group_name   String              @unique
+  keyword_list String[]            @default([])
+  is_active    Boolean             @default(true)
+  created_at   DateTime            @default(now()) @db.Timestamp(6)
+  updated_at   DateTime            @default(now()) @db.Timestamp(6)
+  queries      GoogleSearchQuery[]
+
+  @@index([is_active])
+}
+
+model GoogleSearchQuery {
+  id            Int                 @id @default(autoincrement())
+  query_string  String
+  search_status SearchQueryStatus   @default(pending)
+  website_id    Int?
+  group_id      Int?
+  website_ids   Int[]               @default([])
+  created_at    DateTime            @default(now()) @db.Timestamp(6)
+  updated_at    DateTime            @default(now()) @db.Timestamp(6)
+  group         SearchKeywordGroup? @relation(fields: [group_id], references: [id], onUpdate: NoAction)
+  website       SarkariWebsite?     @relation(fields: [website_id], references: [id], onUpdate: NoAction)
+
+  @@unique([group_id, query_string])
+  @@index([search_status, created_at(sort: Desc)])
+  @@index([website_id])
+  @@index([group_id])
+  @@index([website_ids], map: "GoogleSearchQuery_website_ids_gin_idx", type: Gin)
+  @@index([query_string(ops: raw("gin_trgm_ops"))], map: "GoogleSearchQuery_query_string_trgm_idx", type: Gin)
+}
+
+model CrawlRun {
+  id         Int            @id @default(autoincrement())
+  status     CrawlRunStatus @default(running)
+  started_at DateTime       @default(now()) @db.Timestamp(6)
+  ended_at   DateTime?      @db.Timestamp(6)
+  websites   Int            @default(0)
+  inserted   Int            @default(0)
+  duplicates Int            @default(0)
+  error      String?
+
+  @@index([started_at(sort: Desc)])
+  @@index([status, started_at(sort: Desc)])
+}
+
+model WebUrl {
+  id             Int       @id @default(autoincrement())
+  url            String    @unique
+  title          String    @default("")
+  domain         String    @default("")
+  last_viewed_at DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @default(now())
+
+  @@index([domain])
+  @@index([last_viewed_at])
+  @@index([created_at(sort: Desc)])
+}
