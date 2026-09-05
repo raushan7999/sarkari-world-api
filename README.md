@@ -13,8 +13,34 @@ cp .env.example .env   # set DATABASE_URL and SESSION_SECRET
 ## Run
 
 ```bash
-uv run uvicorn sarkariworld.main:app --reload
+./run.sh dev      # development, auto-reloads
+./run.sh prod     # production, 4 workers, no reload
 ```
+
+### Production
+
+```bash
+ENVIRONMENT=production \
+SESSION_SECRET="<32+ random chars>" \
+BEHIND_TLS_PROXY=true \
+DATABASE_URL="postgresql+asyncpg://..." \
+WORKERS=4 PROXY_IPS=127.0.0.1 ./run.sh prod
+```
+
+`ENVIRONMENT=production` makes the app **refuse to boot** with a
+`SESSION_SECRET` under 32 characters, rather than starting with forgeable
+sessions.
+
+**Size workers against the connection pool.** Each worker owns its own pool, so
+total connections are `WORKERS x (DB_POOL_SIZE + DB_MAX_OVERFLOW)`. With the
+defaults that is `4 x 15 = 60`; Postgres `max_connections` is typically 100 and
+other clients need room too. Raising workers without lowering the pool will
+exhaust the server.
+
+Put a reverse proxy in front for TLS and rate limiting — rate limiting is
+deliberately not implemented in this service. `--proxy-headers` is on so
+client IPs and `https://` are read from `X-Forwarded-*`; set `PROXY_IPS` to the
+proxy's address and never leave it open.
 
 ## API docs
 
