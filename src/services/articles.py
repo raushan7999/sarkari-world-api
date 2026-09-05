@@ -7,7 +7,7 @@ Only `published` rows are ever returned by the public helpers.
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Select, func, or_, select, text
@@ -16,7 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.constants.article import SEARCH_QUERY_MAX, SEARCH_RESULT_MAX
 from src.models.article import Article
 from src.models.enums import ArticleCategory, ArticleStatus
-from src.utils.dates import ist_day_bounds
+from src.utils.dates import ist_day_bounds, now_ist
+from src.utils.slugs import category_enum_to_slug
 
 _NON_ALNUM = re.compile(r"[^a-z0-9 ]+")
 _WHITESPACE = re.compile(r"\s+")
@@ -201,18 +202,140 @@ async def find_recent_for_admin(session: AsyncSession, limit: int) -> list[Artic
     return list(result.scalars().all())
 
 
+# A draft nobody has touched in this long is backlog, not work in progress.
+STALE_DRAFT_DAYS = 30
+# The window the dashboard's "recent activity" counters cover.
+ACTIVITY_WINDOW_DAYS = 7
+
+
 async def get_admin_stats(session: AsyncSession) -> dict[str, int]:
-    """Article counts per status, for the dashboard."""
-    result = await session.execute(
-        select(Article.article_status, func.count()).group_by(Article.article_status)
-    )
-    counts = {status.value: count for status, count in result.all()}
+    """Counters for the dashboard's KPI row.
+
+    Deliberately one round trip of cheap aggregates: this is the first thing
+    the console renders, so it must not wait on the heavier breakdowns below.
+    """
+    now = now_ist()
+    activity_since = now - timedelta(days=ACTIVITY_WINDOW_DAYS)
+    stale_before = now - timedelta(days=STALE_DRAFT_DAYS)
+    published = Article.article_status == ArticleStatus.PUBLISHED
+    draft = Article.article_status == ArticleStatus.DRAFT
+
+    row = (
+        await session.execute(
+            select(
+                func.count().label("total"),
+                func.count().filter(published).label("published"),
+                func.count().filter(draft).label("draft"),
+                func.count()
+                .filter(Article.article_status == ArticleStatus.ARCHIVED)
+                .label("archived"),
+                # A subset of `published`, not a fourth status: the row is
+                # published but dated forward, so the public site has not
+                # surfaced it yet.
+                func.count()
+                .filter(published, Article.published_at > now)
+                .label("scheduled"),
+                func.count()
+                .filter(draft, Article.updated_at < stale_before)
+                .label("stale_drafts"),
+                func.count()
+                .filter(Article.created_at >= activity_since)
+                .label("created_recently"),
+                func.count()
+                .filter(published, Article.published_at >= activity_since)
+                .filter(Article.published_at <= now)
+                .label("published_recently"),
+            )
+        )
+    ).one()
+
     return {
-        "total": sum(counts.values()),
-        "published": counts.get("published", 0),
-        "draft": counts.get("draft", 0),
-        "archived": counts.get("archived", 0),
+        **dict(row._mapping),
+        "activity_window_days": ACTIVITY_WINDOW_DAYS,
+        "stale_draft_days": STALE_DRAFT_DAYS,
     }
+
+
+async def get_category_breakdown(session: AsyncSession) -> list[dict[str, Any]]:
+    """Article counts per category, split by workflow status.
+
+    The editorial question this answers is "where is the backlog?" — a
+    category with thirty drafts and two published rows is a different problem
+    from one with neither.
+    """
+    rows = (
+        await session.execute(
+            select(
+                Article.category,
+                func.count().label("total"),
+                func.count()
+                .filter(Article.article_status == ArticleStatus.PUBLISHED)
+                .label("published"),
+                func.count()
+                .filter(Article.article_status == ArticleStatus.DRAFT)
+                .label("draft"),
+                func.count()
+                .filter(Article.article_status == ArticleStatus.ARCHIVED)
+                .label("archived"),
+            )
+            .group_by(Article.category)
+            .order_by(func.count().desc())
+        )
+    ).all()
+
+    return [
+        {
+            # Hyphenated public slug, as everywhere else on the wire.
+            "category": category_enum_to_slug(category),
+            "total": total,
+            "published": published,
+            "draft": draft,
+            "archived": archived,
+        }
+        for category, total, published, draft, archived in rows
+    ]
+
+
+# Days with no activity are absent from a GROUP BY, which would draw a chart
+# with a missing bar rather than a zero one. generate_series supplies the
+# full axis and the counts left-join onto it.
+_TIMELINE_SQL = text("""
+WITH days AS (
+    SELECT generate_series(
+        CURRENT_DATE - make_interval(days => :days - 1),
+        CURRENT_DATE,
+        interval '1 day'
+    )::date AS day
+)
+SELECT
+    to_char(d.day, 'YYYY-MM-DD') AS day,
+    COALESCE(c.created, 0)::int  AS created,
+    COALESCE(p.published, 0)::int AS published
+FROM days d
+LEFT JOIN (
+    SELECT "created_at"::date AS day, COUNT(*) AS created
+    FROM "Article"
+    WHERE "created_at" >= CURRENT_DATE - make_interval(days => :days - 1)
+    GROUP BY 1
+) c ON c.day = d.day
+LEFT JOIN (
+    SELECT "published_at"::date AS day, COUNT(*) AS published
+    FROM "Article"
+    WHERE "article_status" = 'published'
+      AND "published_at" >= CURRENT_DATE - make_interval(days => :days - 1)
+      AND "published_at" <= now()
+    GROUP BY 1
+) p ON p.day = d.day
+ORDER BY d.day ASC
+""")
+
+
+async def get_publishing_timeline(
+    session: AsyncSession, days: int
+) -> list[dict[str, Any]]:
+    """Articles created and published per day, over the last `days` days."""
+    rows = (await session.execute(_TIMELINE_SQL, {"days": days})).mappings().all()
+    return [dict(row) for row in rows]
 
 
 async def create(session: AsyncSession, data: dict[str, Any]) -> Article:

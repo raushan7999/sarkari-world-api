@@ -1,13 +1,22 @@
-"""Dashboard counters and the constants the admin SPA needs to validate forms."""
+"""Dashboard counters, content analytics, and the constants the admin SPA
+needs to validate forms client-side."""
 
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, Query
 
 from src.constants import article as caps
 from src.constants.article import CATEGORY_SLUGS
 from src.constants.auth import AUTH_PROVIDERS
 from src.dependencies import SessionDep
 from src.models.enums import ArticleStatus, UserRole
-from src.schemas.article import DashboardResponse, MetaLimits, MetaResponse
+from src.schemas.article import (
+    CategoryBreakdownRow,
+    DashboardResponse,
+    MetaLimits,
+    MetaResponse,
+    TimelinePoint,
+)
 from src.services import articles
 
 router = APIRouter(tags=["admin"])
@@ -15,9 +24,34 @@ router = APIRouter(tags=["admin"])
 
 @router.get("/dashboard", summary="Article counters")
 async def dashboard(session: SessionDep) -> DashboardResponse:
-    """Article counts per workflow status."""
+    """Article counts per workflow status, plus the backlog and activity
+    counters the console's KPI row shows.
+
+    Kept to one round trip of cheap aggregates: this is the first thing the
+    dashboard renders, and it must not wait on the breakdowns below.
+    """
     stats = await articles.get_admin_stats(session)
     return DashboardResponse(**stats)
+
+
+@router.get("/analytics/categories", summary="Article counts per category")
+async def category_breakdown(session: SessionDep) -> list[CategoryBreakdownRow]:
+    """Where the content — and the backlog — actually sits.
+
+    Separate from `/dashboard` so a heavier group-by cannot delay the KPI row.
+    """
+    rows = await articles.get_category_breakdown(session)
+    return [CategoryBreakdownRow.model_validate(row) for row in rows]
+
+
+@router.get("/analytics/timeline", summary="Publishing activity per day")
+async def publishing_timeline(
+    session: SessionDep,
+    days: Annotated[int, Query(ge=1, le=365)] = 30,
+) -> list[TimelinePoint]:
+    """Articles created and published per day, for the publishing-rate chart."""
+    rows = await articles.get_publishing_timeline(session, days)
+    return [TimelinePoint.model_validate(row) for row in rows]
 
 
 @router.get("/meta", summary="Enums and field limits")

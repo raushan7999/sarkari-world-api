@@ -190,10 +190,47 @@ class CategoryPage(BaseModel):
 
 
 class DashboardResponse(BaseModel):
+    """The console's KPI row.
+
+    Every field is a cheap counter over one table, so this stays the fast
+    first paint; the breakdowns below are separate endpoints precisely so a
+    slow chart cannot hold up the numbers.
+    """
+
     total: int
     published: int
     draft: int
     archived: int
+    # A subset of `published`, not a fourth status: published but dated
+    # forward, so the public site has not surfaced it yet.
+    scheduled: int
+    # Drafts untouched for `stale_draft_days` — backlog, not work in progress.
+    stale_drafts: int
+    created_recently: int
+    published_recently: int
+    # The windows the two `*_recently` counters cover, so the client can label
+    # them without hard-coding a number the server might change.
+    activity_window_days: int
+    stale_draft_days: int
+
+
+class CategoryBreakdownRow(BaseModel):
+    """One category's article counts, split by workflow status."""
+
+    category: CategorySlug
+    total: int
+    published: int
+    draft: int
+    archived: int
+
+
+class TimelinePoint(BaseModel):
+    """One day on the publishing timeline. Days with no activity are present
+    with zeroes rather than absent, so a chart draws a continuous axis."""
+
+    day: str
+    created: int
+    published: int
 
 
 class MetaLimits(BaseModel):
