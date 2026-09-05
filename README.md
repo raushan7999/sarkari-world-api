@@ -69,6 +69,15 @@ proxy's address and never leave it open.
 | `/redoc` | ReDoc |
 | `/openapi.json` | OpenAPI 3.1 schema |
 
+`/openapi.json` is not optional if you want `/docs` — Swagger UI is a
+JavaScript page that fetches the spec, so disabling the spec disables the UI
+with it. `/redoc` is a second rendering of the same document and can be
+dropped on its own.
+
+`ENABLE_DOCS=false` turns off all three (the API keeps serving); set it in
+production if the surface should not be publicly browsable. `ENABLE_REDOC=false`
+drops only ReDoc.
+
 ### Importing into Postman
 
 **Import → Link → `http://127.0.0.1:8000/openapi.json`.** The spec declares its
