@@ -9,7 +9,11 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from src.constants import REQUEST_ID_HEADER
-from src.utils.logger import bind_request_context, clear_request_context, get_logger
+from src.utils.logger import (
+    bind_request_context,
+    clear_request_context,
+    get_logger,
+)
 
 logger = get_logger(__name__)
 

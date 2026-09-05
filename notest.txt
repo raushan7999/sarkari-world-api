@@ -1,0 +1,16 @@
+Added ./run.sh prod, verified booting with 4 workers against your dev database.
+
+ENVIRONMENT=production \
+SESSION_SECRET="<32+ random chars>" \
+BEHIND_TLS_PROXY=true \
+DATABASE_URL="postgresql+asyncpg://user:pass@host:5432/sarkariworld" \
+WORKERS=4 PROXY_IPS=127.0.0.1 ./run.sh prod
+
+
+
+Generate the secret with python3 -c "import secrets;print(secrets.token_urlsafe(48))".
+
+
+
+./run.sh ps      # 44166 uv run uvicorn ... --host 127.0.0.1 --port 8700
+./run.sh stop    # stopped

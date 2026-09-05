@@ -41,9 +41,13 @@ def create_app(config: Settings | None = None) -> FastAPI:
         description=config.description,
         debug=config.debug,
         lifespan=lifespan,
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url="/docs" if config.enable_docs else None,
+        # ReDoc is not mounted: it is a second rendering of the same document
+        # that /docs already serves interactively.
+        redoc_url=None,
+        # Swagger UI fetches this; setting it to None disables /docs as well.
+        openapi_url="/openapi.json" if config.enable_docs else None,
+        servers=[{"url": config.base_url, "description": config.environment}],
     )
 
     setup_middleware(app, config)

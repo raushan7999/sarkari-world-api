@@ -25,6 +25,10 @@ logger = get_logger(__name__)
 engine: AsyncEngine = create_async_engine(
     settings.database_url,
     echo=settings.db_echo,
+    # The Node service pins every pooled connection to IST. Timestamps in this
+    # database are naive and IST-relative, so omitting this shifts every value
+    # by 5h30m.
+    connect_args={"server_settings": {"timezone": settings.db_timezone}},
     pool_size=settings.db_pool_size,
     max_overflow=settings.db_max_overflow,
     pool_recycle=settings.db_pool_recycle,
