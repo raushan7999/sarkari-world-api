@@ -57,7 +57,7 @@ def _verify_google_credential_sync(credential: str) -> OAuthProfile:
         raise ProviderNotConfiguredError
 
     try:
-        claims = id_token.verify_oauth2_token(
+        claims = id_token.verify_oauth2_token(  # type: ignore[no-untyped-call]
             credential,
             google_requests.Request(),
             settings.google_oauth_client_id,

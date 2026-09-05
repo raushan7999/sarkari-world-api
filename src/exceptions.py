@@ -32,6 +32,12 @@ class NotFoundError(AppError):
     message = "Resource not found"
 
 
+class ValidationError(AppError):
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    code = "validation_error"
+    message = "Request validation failed"
+
+
 class ConflictError(AppError):
     status_code = status.HTTP_409_CONFLICT
     code = "conflict"
