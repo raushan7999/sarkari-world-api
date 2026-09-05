@@ -3,7 +3,7 @@ from collections.abc import AsyncGenerator
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from sarkariworld.main import create_app
+from src.main import create_app
 
 
 @pytest.fixture

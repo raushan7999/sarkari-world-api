@@ -4,25 +4,25 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from sarkariworld.schemas.pagination import admin_page_params, public_page_params
-from sarkariworld.services.tokens import (
+from src.schemas.pagination import admin_page_params, public_page_params
+from src.services.tokens import (
     is_revoked,
     mint_session_token,
     verify_session_token,
 )
-from sarkariworld.utils.article_payload import (
+from src.utils.article_payload import (
     normalise_article_links,
     normalise_faq_list,
     normalise_search_keyword,
 )
-from sarkariworld.utils.dates import to_ist_iso
-from sarkariworld.utils.html import render_markdown, sanitize_article_html
-from sarkariworld.utils.slugs import (
+from src.utils.dates import to_ist_iso
+from src.utils.html import render_markdown, sanitize_article_html
+from src.utils.slugs import (
     category_enum_to_slug,
     category_slug_to_enum,
     slugify,
 )
-from sarkariworld.utils.urls import parse_http_url, valid_http_url
+from src.utils.urls import parse_http_url, valid_http_url
 
 
 class TestDates:

@@ -80,7 +80,7 @@ summary, description and typed response model.
 uv run pytest        # 88 tests (58 unit + 30 integration)
 uv run ruff check .
 uv run ruff format .
-uv run mypy sarkariworld      # strict
+uv run mypy src      # strict
 ```
 
 `tests/integration/` runs against a real database and is **skipped
@@ -91,7 +91,7 @@ write, so they are safe against a developer database.
 ## Layout
 
 ```
-sarkariworld/
+src/
 ├── main.py               create_app() factory + lifespan
 ├── dependencies.py       DB session + auth guards
 ├── exceptions.py         AppError hierarchy + handlers

@@ -13,11 +13,11 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from sarkariworld.config import settings
-from sarkariworld.db.session import async_session_factory
-from sarkariworld.models.article import Article
-from sarkariworld.models.enums import UserRole
-from sarkariworld.models.user import User
+from src.config import settings
+from src.db.session import async_session_factory
+from src.models.article import Article
+from src.models.enums import UserRole
+from src.models.user import User
 
 V1 = settings.api_v1_prefix
 IST_SUFFIX = re.compile(r"\+05:30$")
@@ -373,7 +373,7 @@ class TestApiKeyAuth:
     async def test_revoked_key_is_rejected(
         self, api: AsyncClient, api_key: str, admin_user: User
     ) -> None:
-        from sarkariworld.utils.dates import now_ist
+        from src.utils.dates import now_ist
 
         async with async_session_factory() as session:
             user = await session.get(User, admin_user.id)
@@ -416,7 +416,7 @@ class TestRoleGuards:
             await session.commit()
 
     def _headers(self, user: User, role: str) -> dict[str, str]:
-        from sarkariworld.services.tokens import mint_session_token
+        from src.services.tokens import mint_session_token
 
         return {
             "Authorization": f"Bearer {mint_session_token(user.id, user.email, role)}"
