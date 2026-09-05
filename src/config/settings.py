@@ -17,7 +17,16 @@ class Settings(BaseSettings):
     description: str = "API for Sarkari World."
     environment: str = "local"
     debug: bool = False
-    api_v1_prefix: str = "/api/v1"
+    # The host is already api.sarkariworld.com, so an `/api` segment on top of
+    # that repeats itself. The version stays: it is the only way to ship a
+    # breaking change without breaking the website, the console and any
+    # installed mobile app at the same moment.
+    api_v1_prefix: str = "/v1"
+    # Temporary: also answer on the previous `/api/v1` paths, so a browser
+    # holding a cached bundle from before the cutover keeps working. Hidden
+    # from the OpenAPI document, so only the canonical prefix is advertised.
+    # Remove this once no traffic arrives on the legacy prefix.
+    legacy_api_prefix: str | None = "/api/v1"
     # Advertised in the OpenAPI document as the server URL, so an imported
     # Postman/client collection points at the right host instead of guessing.
     base_url: str = "http://127.0.0.1:8000"

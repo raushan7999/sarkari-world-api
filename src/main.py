@@ -56,6 +56,16 @@ def create_app(config: Settings | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(api_router, prefix=config.api_v1_prefix)
 
+    # The same routes under the previous prefix, so a browser still running a
+    # bundle built before the cutover does not break. `include_in_schema=False`
+    # keeps them out of the OpenAPI document, so /docs and any generated client
+    # only ever see the canonical prefix. Drop `LEGACY_API_PREFIX` from the
+    # environment once the old paths stop being requested.
+    if config.legacy_api_prefix and config.legacy_api_prefix != config.api_v1_prefix:
+        app.include_router(
+            api_router, prefix=config.legacy_api_prefix, include_in_schema=False
+        )
+
     return app
 
 
