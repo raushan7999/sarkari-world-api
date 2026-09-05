@@ -21,11 +21,16 @@ Swagger: `/docs` · ReDoc: `/redoc` · Schema: `/openapi.json`
 ## Checks
 
 ```bash
-uv run pytest        # 58 tests
+uv run pytest        # 88 tests (58 unit + 30 integration)
 uv run ruff check .
 uv run ruff format .
 uv run mypy src      # strict
 ```
+
+`tests/integration/` runs against a real database and is **skipped
+automatically** when `DATABASE_URL` is unreachable, so the suite passes
+without Postgres. Those tests read existing rows and clean up everything they
+write, so they are safe against a developer database.
 
 ## Layout
 

@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from src.schemas.common import ErrorDetail, ErrorResponse
+from src.schemas.common import ErrorDetail, ErrorResponse, FieldError
 from src.utils.logger import get_logger, get_request_id
 
 logger = get_logger(__name__)
@@ -56,12 +56,24 @@ class ForbiddenError(AppError):
     message = "Insufficient permissions."
 
 
-def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
+def _error_response(
+    status_code: int,
+    code: str,
+    message: str,
+    details: list[FieldError] | None = None,
+) -> JSONResponse:
     """Every error leaves through here, so the shape can never drift."""
     payload = ErrorResponse(
-        error=ErrorDetail(code=code, message=message, request_id=get_request_id())
+        error=ErrorDetail(
+            code=code,
+            message=message,
+            request_id=get_request_id(),
+            details=details,
+        )
     )
-    return JSONResponse(status_code=status_code, content=payload.model_dump())
+    return JSONResponse(
+        status_code=status_code, content=payload.model_dump(exclude_none=True)
+    )
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -80,10 +92,20 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _validation_error(
         _: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        # Name the offending fields; a bare "validation failed" leaves the
+        # caller guessing which input to correct.
+        details = [
+            FieldError(
+                path=".".join(str(part) for part in error["loc"][1:]) or "body",
+                message=error["msg"],
+            )
+            for error in exc.errors()
+        ]
         return _error_response(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "validation_error",
             "Request validation failed",
+            details,
         )
 
     @app.exception_handler(Exception)
