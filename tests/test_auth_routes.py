@@ -13,11 +13,12 @@ V1 = settings.api_v1_prefix
 
 
 async def test_providers_lists_only_configured(client: AsyncClient) -> None:
+    """Google is the only provider, and only advertised once configured."""
     response = await client.get(f"{V1}/auth/providers")
 
     assert response.status_code == 200
-    # No GOOGLE_OAUTH_CLIENT_ID in the test environment.
-    assert response.json() == {"providers": []}
+    expected = ["google"] if settings.google_oauth_client_id else []
+    assert response.json() == {"providers": expected}
 
 
 async def test_me_is_null_when_anonymous(client: AsyncClient) -> None:

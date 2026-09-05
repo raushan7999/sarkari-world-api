@@ -164,18 +164,47 @@ catch-all cannot coexist with `/{category}`.
 
 ## Auth
 
-Three credential types, resolved in order and never raising — a bad credential
-resolves to anonymous and the guards produce the 401/403:
+**People sign in with Google, and only Google.** There is no password login and
+no other provider — `POST /api/v1/auth/{provider}` 404s for anything else.
+A first sign-in creates the account at role `user`; signing in again never
+changes a role, so nobody can promote themselves.
 
-1. **API key** — `X-API-Key: sw_…`. Indexed prefix lookup, then bcrypt. bcrypt
-   runs even on a prefix miss so timing does not leak which prefixes exist.
-2. **Session JWT** — `Authorization: Bearer …` or the `sw_session` cookie.
-   Revoked via the shared `User.session_invalidated_at` column.
-3. **Google ID token** — verified off the event loop, then upgraded to a JWT.
+### Roles
 
-Guards: `require_auth`, `require_role(...)`, `require_manage` (staff, with
-DELETE restricted to admins). Declared on routers, so a new route under
-`/admin` inherits the guard rather than needing its own.
+`user` → `editor` → `admin`, changed only by an admin through
+`PATCH /api/v1/admin/users/{id}/role` (self-changes are refused, so the last
+admin cannot lock themselves out).
+
+| Role | Can |
+|---|---|
+| `user` | Read public content, manage their own bookmarks |
+| `editor` | All of the above, plus create and edit articles |
+| `admin` | Everything, including deletes, user roles and API keys |
+
+Guards are declared on routers — `require_auth`, `require_role(...)`,
+`require_manage` (staff, with DELETE restricted to admins) — so a new route
+under `/admin` inherits them rather than needing its own.
+
+### API keys (machines)
+
+Server-to-server callers (the content agent, CI) use `X-API-Key: sw_…`.
+
+```bash
+POST   /api/v1/admin/users/{id}/api-key   # issue or rotate; admin only
+DELETE /api/v1/admin/users/{id}/api-key   # revoke
+```
+
+- **Editors and admins only** — issuing one for a plain `user` is refused
+- **Valid 30 days**, derived from the issue date; rotation is manual (call
+  POST again, which invalidates the previous key immediately)
+- **Dies on demotion** — validity is re-checked against the owner's current
+  role on every request, so a key never outlives the privilege it was issued
+  against
+- The secret is returned **once**; only a bcrypt hash is stored, so a lost key
+  must be rotated, not recovered
+
+Verification does an indexed prefix lookup then one bcrypt compare, and runs
+bcrypt even on a prefix miss so timing cannot reveal which prefixes exist.
 
 ## Conventions worth knowing
 

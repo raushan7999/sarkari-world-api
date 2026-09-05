@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base
-from src.models.enums import UserRole
+from src.models.enums import StateName, UserRole
 
 
 class User(Base):
@@ -21,9 +21,18 @@ class User(Base):
     other_mobile: Mapped[str | None] = mapped_column(String(10))
     city: Mapped[str | None] = mapped_column(String(100))
     district: Mapped[str | None] = mapped_column(String(100))
-    # The StateName enum has 36 values but is unused by this API; read it as
-    # text so a value added by another service cannot break deserialisation.
-    state: Mapped[str | None] = mapped_column(Text)
+    # Must use the native enum type: binding this column as text makes every
+    # INSERT fail with "column state is of type StateName but expression is of
+    # type character varying".
+    state: Mapped[StateName | None] = mapped_column(
+        Enum(
+            StateName,
+            name="StateName",
+            native_enum=True,
+            create_type=False,
+            values_callable=lambda enum: [member.value for member in enum],
+        )
+    )
     pin: Mapped[str | None] = mapped_column(CHAR(6))
     address: Mapped[str | None] = mapped_column(String(500))
 

@@ -9,5 +9,11 @@ USER_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60  # 30 days
 STAFF_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 SESSION_TOKEN_MAX_LENGTH = 4096
 
+# API keys expire 30 days after issue and are rotated by hand. There is no
+# expiry column in the schema, so validity is derived from api_key_created_at.
+API_KEY_TTL_DAYS = 30
+# Bytes of entropy in the generated secret.
+API_KEY_ENTROPY_BYTES = 24
+
 STAFF_ROLES = ("editor", "admin")
 AUTH_PROVIDERS = ("subscription", "google")

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import AsyncGenerator
+from datetime import datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -18,6 +19,7 @@ from src.db.session import async_session_factory
 from src.models.article import Article
 from src.models.enums import UserRole
 from src.models.user import User
+from src.utils.dates import now_ist
 
 V1 = settings.api_v1_prefix
 IST_SUFFIX = re.compile(r"\+05:30$")
@@ -354,39 +356,6 @@ class TestPublishEndpoint:
         assert "article_status" in paths
 
 
-class TestApiKeyAuth:
-    async def test_valid_key_authenticates(
-        self, api: AsyncClient, api_key: str
-    ) -> None:
-        for header in ({"X-API-Key": api_key}, {"Authorization": f"Bearer {api_key}"}):
-            assert (
-                await api.get(f"{V1}/admin/dashboard", headers=header)
-            ).status_code == 200
-
-    async def test_wrong_secret_with_valid_prefix_is_rejected(
-        self, api: AsyncClient, api_key: str
-    ) -> None:
-        forged = api_key[:11] + "0" * 24
-        response = await api.get(f"{V1}/admin/dashboard", headers={"X-API-Key": forged})
-        assert response.status_code == 401
-
-    async def test_revoked_key_is_rejected(
-        self, api: AsyncClient, api_key: str, admin_user: User
-    ) -> None:
-        from src.utils.dates import now_ist
-
-        async with async_session_factory() as session:
-            user = await session.get(User, admin_user.id)
-            assert user is not None
-            user.api_key_revoked_at = now_ist()
-            await session.commit()
-
-        response = await api.get(
-            f"{V1}/admin/dashboard", headers={"X-API-Key": api_key}
-        )
-        assert response.status_code == 401
-
-
 class TestRoleGuards:
     @pytest.fixture
     async def editor(self, _database: None) -> AsyncGenerator[User]:
@@ -476,3 +445,291 @@ class TestRoleGuards:
             json={"role": "editor"},
         )
         assert response.status_code == 409
+
+
+class TestGoogleSignInRoles:
+    """Google is the only human sign-in, and it never grants privilege.
+
+    New accounts always start at `user`; an existing account keeps whatever
+    role an admin gave it. Signing in must never be a way to change your own
+    role, so these two rules are asserted against the real database.
+    """
+
+    EMAIL = "pytest-signin@example.com"
+
+    @pytest.fixture(autouse=True)
+    async def _cleanup(self, _database: None) -> AsyncGenerator[None]:
+        yield
+        async with async_session_factory() as session:
+            result = await session.execute(select(User).where(User.email == self.EMAIL))
+            if (user := result.scalar_one_or_none()) is not None:
+                await session.delete(user)
+                await session.commit()
+
+    async def test_only_google_is_offered(self, api: AsyncClient) -> None:
+        body = (await api.get(f"{V1}/auth/providers")).json()
+        assert body["providers"] == ["google"]
+
+    async def test_other_providers_are_refused(self, api: AsyncClient) -> None:
+        for provider in ("facebook", "github", "password"):
+            response = await api.post(f"{V1}/auth/{provider}", json={"credential": "x"})
+            assert response.status_code == 404, provider
+
+    async def test_first_sign_in_creates_a_plain_user(self) -> None:
+        from src.services.users import upsert_oauth_user
+
+        async with async_session_factory() as session:
+            created = await upsert_oauth_user(
+                session,
+                email=self.EMAIL,
+                name="Pytest Signin",
+                google_id="pytest-google-id",
+                picture_url=None,
+            )
+            assert created.role is UserRole.USER
+            assert created.auth_provider == "google"
+
+    async def test_signing_in_again_never_changes_role(self) -> None:
+        """An admin who signs in stays admin; a user cannot self-promote."""
+        from src.services.users import upsert_oauth_user
+
+        async with async_session_factory() as session:
+            user = await upsert_oauth_user(
+                session,
+                email=self.EMAIL,
+                name="Pytest Signin",
+                google_id="pytest-google-id",
+                picture_url=None,
+            )
+            # An admin grants a role manually.
+            user.role = UserRole.EDITOR
+            await session.commit()
+
+        async with async_session_factory() as session:
+            again = await upsert_oauth_user(
+                session,
+                email=self.EMAIL,
+                name="Renamed By Google",
+                google_id="pytest-google-id",
+                picture_url="https://example.com/p.png",
+            )
+            # Profile fields refresh; the granted role survives.
+            assert again.role is UserRole.EDITOR
+            assert again.name == "Renamed By Google"
+
+    async def test_admin_can_change_a_role(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        from src.services.users import upsert_oauth_user
+
+        async with async_session_factory() as session:
+            user = await upsert_oauth_user(
+                session,
+                email=self.EMAIL,
+                name="Pytest Signin",
+                google_id="pytest-google-id",
+                picture_url=None,
+            )
+            user_id = user.id
+
+        promoted = await api.patch(
+            f"{V1}/admin/users/{user_id}/role",
+            headers=admin_headers,
+            json={"role": "editor"},
+        )
+        assert promoted.status_code == 200
+        assert promoted.json()["role"] == "editor"
+
+        demoted = await api.patch(
+            f"{V1}/admin/users/{user_id}/role",
+            headers=admin_headers,
+            json={"role": "user"},
+        )
+        assert demoted.json()["role"] == "user"
+
+    async def test_a_plain_user_reaches_nothing_privileged(
+        self, api: AsyncClient
+    ) -> None:
+        from src.services.tokens import mint_session_token
+        from src.services.users import upsert_oauth_user
+
+        async with async_session_factory() as session:
+            user = await upsert_oauth_user(
+                session,
+                email=self.EMAIL,
+                name="Pytest Signin",
+                google_id="pytest-google-id",
+                picture_url=None,
+            )
+            headers = {
+                "Authorization": "Bearer "
+                + mint_session_token(user.id, user.email, "user")
+            }
+
+        # Their own account works.
+        assert (
+            await api.get(f"{V1}/account/bookmarks", headers=headers)
+        ).status_code == 200
+        # Staff and admin surfaces do not.
+        for path in ("/admin/dashboard", "/admin/posts", "/admin/users"):
+            assert (await api.get(f"{V1}{path}", headers=headers)).status_code == 403, (
+                path
+            )
+
+
+class TestApiKeys:
+    """Keys are staff-only, expire after 30 days, and die on demotion."""
+
+    EMAIL = "pytest-apikey@example.com"
+
+    @pytest.fixture(autouse=True)
+    async def _cleanup(self, _database: None) -> AsyncGenerator[None]:
+        yield
+        async with async_session_factory() as session:
+            result = await session.execute(select(User).where(User.email == self.EMAIL))
+            if (user := result.scalar_one_or_none()) is not None:
+                await session.delete(user)
+                await session.commit()
+
+    async def _make_user(self, role: UserRole) -> int:
+        from src.services.users import upsert_oauth_user
+
+        async with async_session_factory() as session:
+            user = await upsert_oauth_user(
+                session,
+                email=self.EMAIL,
+                name="Pytest Key Holder",
+                google_id="pytest-apikey-id",
+                picture_url=None,
+            )
+            user.role = role
+            await session.commit()
+            return user.id
+
+    async def test_plain_users_are_refused_a_key(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        user_id = await self._make_user(UserRole.USER)
+
+        response = await api.post(
+            f"{V1}/admin/users/{user_id}/api-key", headers=admin_headers, json={}
+        )
+
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "forbidden"
+
+    async def test_editor_gets_a_working_key_valid_30_days(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        user_id = await self._make_user(UserRole.EDITOR)
+
+        issued = await api.post(
+            f"{V1}/admin/users/{user_id}/api-key",
+            headers=admin_headers,
+            json={"name": "content-agent"},
+        )
+
+        assert issued.status_code == 200
+        body = issued.json()
+        key = body["api_key"]
+        assert key.startswith("sw_")
+        assert body["prefix"] == key[:11]
+        assert body["name"] == "content-agent"
+
+        created = datetime.fromisoformat(body["created_at"])
+        expires = datetime.fromisoformat(body["expires_at"])
+        assert (expires - created).days == 30
+
+        # The key actually authenticates.
+        assert (
+            await api.get(f"{V1}/admin/posts", headers={"X-API-Key": key})
+        ).status_code == 200
+
+    async def test_rotation_invalidates_the_previous_key(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        user_id = await self._make_user(UserRole.ADMIN)
+        url = f"{V1}/admin/users/{user_id}/api-key"
+
+        first = (await api.post(url, headers=admin_headers, json={})).json()["api_key"]
+        second = (await api.post(url, headers=admin_headers, json={})).json()["api_key"]
+
+        assert first != second
+        assert (
+            await api.get(f"{V1}/admin/posts", headers={"X-API-Key": first})
+        ).status_code == 401
+        assert (
+            await api.get(f"{V1}/admin/posts", headers={"X-API-Key": second})
+        ).status_code == 200
+
+    async def test_demotion_kills_the_key(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        """A key must not outlive the privilege it was issued against."""
+        user_id = await self._make_user(UserRole.EDITOR)
+        key = (
+            await api.post(
+                f"{V1}/admin/users/{user_id}/api-key", headers=admin_headers, json={}
+            )
+        ).json()["api_key"]
+        assert (
+            await api.get(f"{V1}/admin/posts", headers={"X-API-Key": key})
+        ).status_code == 200
+
+        await api.patch(
+            f"{V1}/admin/users/{user_id}/role",
+            headers=admin_headers,
+            json={"role": "user"},
+        )
+
+        assert (
+            await api.get(f"{V1}/admin/posts", headers={"X-API-Key": key})
+        ).status_code == 401
+
+    async def test_expired_key_is_refused(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        user_id = await self._make_user(UserRole.EDITOR)
+        key = (
+            await api.post(
+                f"{V1}/admin/users/{user_id}/api-key", headers=admin_headers, json={}
+            )
+        ).json()["api_key"]
+
+        # Backdate past the 30-day window.
+        async with async_session_factory() as session:
+            user = await session.get(User, user_id)
+            assert user is not None
+            user.api_key_created_at = now_ist() - timedelta(days=31)
+            await session.commit()
+
+        assert (
+            await api.get(f"{V1}/admin/posts", headers={"X-API-Key": key})
+        ).status_code == 401
+
+    async def test_revoke_stops_the_key(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        user_id = await self._make_user(UserRole.EDITOR)
+        url = f"{V1}/admin/users/{user_id}/api-key"
+        key = (await api.post(url, headers=admin_headers, json={})).json()["api_key"]
+
+        assert (await api.delete(url, headers=admin_headers)).status_code == 204
+        assert (
+            await api.get(f"{V1}/admin/posts", headers={"X-API-Key": key})
+        ).status_code == 401
+
+    async def test_wrong_secret_with_valid_prefix_is_rejected(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        user_id = await self._make_user(UserRole.EDITOR)
+        key = (
+            await api.post(
+                f"{V1}/admin/users/{user_id}/api-key", headers=admin_headers, json={}
+            )
+        ).json()["api_key"]
+
+        forged = key[:11] + "0" * 24
+        assert (
+            await api.get(f"{V1}/admin/posts", headers={"X-API-Key": forged})
+        ).status_code == 401

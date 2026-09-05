@@ -9,10 +9,8 @@ database with real data and must leave it exactly as they found it.
 
 from __future__ import annotations
 
-import secrets
 from collections.abc import AsyncGenerator
 
-import bcrypt
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
@@ -21,6 +19,7 @@ from src.db.session import async_session_factory, check_connection
 from src.main import create_app
 from src.models.enums import UserRole
 from src.models.user import User
+from src.services import api_keys
 from src.services.tokens import mint_session_token
 
 # Cached so the reachability probe runs once per session even though the
@@ -69,18 +68,16 @@ def admin_headers(admin_user: User) -> dict[str, str]:
 
 @pytest.fixture
 async def api_key(admin_user: User) -> AsyncGenerator[str]:
-    """Provision a real API key on the admin, then remove it."""
-    key = "sw_" + secrets.token_hex(16)
-    hashed = bcrypt.hashpw(key.encode(), bcrypt.gensalt(rounds=12)).decode()
+    """Issue a real key through the service, then clear it.
 
+    Goes through `api_keys.issue` rather than writing columns by hand so the
+    fixture exercises the same path the endpoint uses — including the issue
+    timestamp the 30-day expiry is derived from.
+    """
     async with async_session_factory() as session:
         user = await session.get(User, admin_user.id)
         assert user is not None
-        user.api_key_prefix = key[:11]
-        user.api_key_hash = hashed
-        user.api_key_name = "pytest"
-        user.api_key_revoked_at = None
-        await session.commit()
+        key = await api_keys.issue(session, user, name="pytest")
 
     yield key
 
@@ -90,5 +87,7 @@ async def api_key(admin_user: User) -> AsyncGenerator[str]:
         user.api_key_prefix = None
         user.api_key_hash = None
         user.api_key_name = None
+        user.api_key_created_at = None
+        user.api_key_last_used_at = None
         user.api_key_revoked_at = None
         await session.commit()

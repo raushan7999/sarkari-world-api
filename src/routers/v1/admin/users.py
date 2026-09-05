@@ -6,14 +6,19 @@ whole subtree even though they pass the surrounding `require_manage`.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 
 from src.dependencies import AuthedUser, SessionDep, require_role
 from src.exceptions import ConflictError, NotFoundError
 from src.models.enums import UserRole
 from src.schemas.pagination import AdminPage, admin_page_params
-from src.schemas.user import AdminUser, UserRoleUpdate
-from src.services import users
+from src.schemas.user import (
+    AdminUser,
+    ApiKeyIssued,
+    ApiKeyRequest,
+    UserRoleUpdate,
+)
+from src.services import api_keys, users
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -73,3 +78,53 @@ async def update_role(
     await session.refresh(user)
     logger.info("admin_user_role_change", user_id=user_id, role=payload.role.value)
     return AdminUser.model_validate(user)
+
+
+@router.post("/{user_id}/api-key", summary="Issue or rotate an API key")
+async def issue_api_key(
+    user_id: int,
+    payload: ApiKeyRequest,
+    session: SessionDep,
+) -> ApiKeyIssued:
+    """Mint a server-to-server key for an editor or admin.
+
+    The secret is returned **once** — only a bcrypt hash is stored, so a lost
+    key must be rotated rather than recovered. Calling this again rotates:
+    the previous key stops working immediately.
+
+    Keys are refused for plain users, expire after 30 days, and stop working
+    the moment their owner is demoted.
+    """
+    user = await users.get_by_id(session, user_id)
+    if user is None:
+        raise NotFoundError(f"User not found: {user_id}")
+
+    secret = await api_keys.issue(session, user, payload.name)
+    logger.info("admin_api_key_issued", user_id=user_id, role=user.role.value)
+
+    return ApiKeyIssued(
+        api_key=secret,
+        prefix=user.api_key_prefix or "",
+        name=user.api_key_name,
+        created_at=user.api_key_created_at,
+        expires_at=user.api_key_created_at + api_keys.TTL
+        if user.api_key_created_at
+        else None,
+    )
+
+
+@router.delete(
+    "/{user_id}/api-key",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Revoke an API key",
+)
+async def revoke_api_key(user_id: int, session: SessionDep) -> None:
+    """Stop a key working. Metadata is kept so the audit trail survives."""
+    user = await users.get_by_id(session, user_id)
+    if user is None:
+        raise NotFoundError(f"User not found: {user_id}")
+    if user.api_key_hash is None:
+        raise NotFoundError("That user holds no API key.")
+
+    await api_keys.revoke(session, user)
+    logger.info("admin_api_key_revoked", user_id=user_id)
