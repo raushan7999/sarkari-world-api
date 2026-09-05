@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from src.utils.dates import to_ist_iso
 
@@ -65,6 +65,15 @@ class TopArticle(BaseModel):
     count: int
     slug: str | None = None
     title: str | None = None
+    # Present so a client can build the article's public URL, which is
+    # /{category}/{slug}. Null when the article has since been deleted.
+    category: str | None = None
+
+    @field_validator("category")
+    @classmethod
+    def _slugify_category(cls, value: str | None) -> str | None:
+        """Emit the hyphenated public slug, matching every other endpoint."""
+        return value.replace("_", "-") if value else value
 
 
 class TopUser(BaseModel):

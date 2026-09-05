@@ -77,11 +77,14 @@ SELECT
 FROM "Bookmark"
 """)
 
+# `category` is cast to text because the column is a Postgres enum and this is
+# raw SQL — without the cast the driver hands back the native enum value.
 _TOP_ARTICLES = text("""
-SELECT b."article_id", COUNT(*)::int AS count, a."slug", a."title"
+SELECT b."article_id", COUNT(*)::int AS count,
+       a."slug", a."title", a."category"::text AS category
 FROM "Bookmark" b
 LEFT JOIN "Article" a ON a."id" = b."article_id"
-GROUP BY b."article_id", a."slug", a."title"
+GROUP BY b."article_id", a."slug", a."title", a."category"
 ORDER BY count DESC, b."article_id" ASC
 LIMIT :limit
 """)
