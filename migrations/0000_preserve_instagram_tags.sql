@@ -1,5 +1,5 @@
--- Run BEFORE canonical 0003 (which renames cover_instagram_url ->
--- cover_image_url and thereby reinterprets its contents as cover images).
+-- Runs before 0003, which renames cover_instagram_url -> cover_image_url and
+-- thereby reinterprets its contents as cover images.
 --
 -- All 9 populated `cover_instagram_url` values are real Instagram post URLs,
 -- and 8 of them exist ONLY there -- they are not in the `instagram_post_url`
@@ -20,6 +20,6 @@ WHERE "cover_instagram_url" IS NOT NULL
   AND NOT COALESCE("instagram_post_url", '[]'::jsonb)
           @> jsonb_build_array(jsonb_build_object('url', "cover_instagram_url"));
 
--- 2. Undo the hand-rolled column so 0003's RENAME has a free target name.
+-- 2. Drop any pre-existing cover_image_url so 0003's RENAME has a free target.
 --    Verified 0 rows populated before dropping.
 ALTER TABLE "Article" DROP COLUMN IF EXISTS "cover_image_url";

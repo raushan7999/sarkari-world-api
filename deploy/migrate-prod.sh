@@ -1,48 +1,43 @@
 #!/usr/bin/env bash
-# Bring the `sarkariworld` database up to the schema this FastAPI service maps.
+# Apply the SQL migrations in ../migrations to the production database.
 #
-# It is currently on the Node-era schema: 5-value ArticleCategory enum,
-# cover_instagram_url, no hashed api_key columns -- so every category endpoint
-# 500s. This runs the canonical chain from the Node repo, plus two local steps
-# that protect the Instagram tags.
+# Every file is idempotent (guarded with IF EXISTS / IF NOT EXISTS / DO blocks),
+# so there is no ledger and re-running is a no-op. Files apply in lexical order,
+# which is also the required order:
 #
-# Order matters:
-#   0000  local   preserve cover_instagram_url into instagram_post_url, and
-#                 drop the hand-rolled empty cover_image_url column
-#   0001  canon   add 'editor' to UserRole      (must run alone: ALTER TYPE)
-#   0002  canon   hashed api_key_* columns
-#   0003  canon   rename cover_instagram_url -> cover_image_url
-#   0006  local   clear the renamed values that are Instagram URLs, not images
-#   0004  canon   drop 'saved' from ArticleStatus
-#   0005r local   11-value ArticleCategory + keyword re-bucket of 'exam';
-#                 drops views/related_articles and the unused tables
+#   0000  preserve cover_instagram_url into instagram_post_url  (before 0003)
+#   0001  add 'editor' to UserRole        (alone: ALTER TYPE ... ADD VALUE)
+#   0002  hashed api_key_* columns
+#   0003  rename cover_instagram_url -> cover_image_url
+#   0004  drop 'saved' from ArticleStatus
+#   0005  11-value ArticleCategory, re-bucket 'exam', drop unused columns/tables
+#   0006  clear cover_image_url values that are Instagram links, not images
 #
-# Every step is idempotent, so re-running is safe.
+# 0001..0004 came from the Node service verbatim; 0005 is adapted from its
+# counterpart (the original is kept at migrations/reference/). 0000 and 0006 are
+# specific to this database. See migrations/README.md.
+#
+# Override the target with DATABASE: DATABASE=sarkariworld_dev ./deploy/migrate-prod.sh
 set -euo pipefail
 
-DB="sarkariworld"
-CANON="/Users/raushankumar/skw/sarkariworld-api/prisma/sql"
-LOCAL="$(cd "$(dirname "$0")/.." && pwd)/migrations"
-PSQL=(psql -U root -h localhost -d "$DB" -v ON_ERROR_STOP=1)
+DB="${DATABASE:-sarkariworld}"
+DB_USER="${DATABASE_USER:-root}"
+DB_HOST="${DATABASE_HOST:-localhost}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+MIGRATIONS="$ROOT/migrations"
+PSQL=(psql -U "$DB_USER" -h "$DB_HOST" -d "$DB" -v ON_ERROR_STOP=1)
 
 echo "==> backing up $DB"
-mkdir -p backups
-STAMP="$(date +%Y%m%d-%H%M%S)"
-pg_dump -U root -h localhost -d "$DB" -Fc -f "backups/$DB-pre-chain-$STAMP.dump"
-echo "    backups/$DB-pre-chain-$STAMP.dump"
+mkdir -p "$ROOT/backups"
+DUMP="$ROOT/backups/$DB-pre-migrate-$(date +%Y%m%d-%H%M%S).dump"
+pg_dump -U "$DB_USER" -h "$DB_HOST" -d "$DB" -Fc -f "$DUMP"
+echo "    $DUMP"
 
-run() {
-  echo "==> $1"
-  "${PSQL[@]}" -f "$2"
-}
-
-run "0000 preserve instagram tags (local)"        "$LOCAL/0000_preserve_instagram_tags.sql"
-run "0001 add editor role"                        "$CANON/0001_add_editor_role.sql"
-run "0002 hashed api key columns"                 "$CANON/0002_add_hashed_api_key_columns.sql"
-run "0003 rename cover_instagram_url"             "$CANON/0003_rename_cover_image_url.sql"
-run "0006 clear non-image cover urls (local)"     "$LOCAL/0006_clear_non_image_cover_urls.sql"
-run "0004 remove saved article status"            "$CANON/0004_remove_saved_article_status.sql"
-run "0005 align to trimmed schema + re-bucket"    "$LOCAL/0005_align_to_trimmed_schema.rebucket.sql"
+shopt -s nullglob
+for file in "$MIGRATIONS"/[0-9][0-9][0-9][0-9]_*.sql; do
+  echo "==> $(basename "$file")"
+  "${PSQL[@]}" -f "$file"
+done
 
 echo
 echo "==> category distribution"

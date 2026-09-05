@@ -1,7 +1,8 @@
 # Sarkari World API
 
-FastAPI reimplementation of the Node/Express `sarkariworld-api`, serving the
-public website, admin console and Android app over the same Postgres database.
+FastAPI service behind the public website, admin console and Android app.
+Replaces the Node/Express `sarkariworld-api`, which it has now retired, and
+owns the same Postgres database.
 
 ## Setup
 
@@ -129,20 +130,28 @@ Layering: routers own HTTP and validation, services own database access,
 schemas own the wire contract. A router never queries directly; a service never
 serialises.
 
-## Relationship to the Node service
+## Schema ownership
 
-Both read the **same Prisma-managed tables**. Prisma still owns DDL — there are
-no migrations here, and `models/` maps onto the existing schema (quoted
-PascalCase table names, native Postgres enum types).
+This service now owns DDL. `migrations/` holds plain, idempotent SQL applied in
+lexical order by `deploy/migrate-prod.sh`; see `migrations/README.md` for what
+each file does and why two of them are specific to this database.
 
-Two deliberate incompatibilities:
+The tables are still the ones Prisma created — quoted PascalCase names, native
+Postgres enum types — and `models/` maps onto them. The retired Node service's
+Prisma schema is kept at `migrations/reference/schema.prisma`, because it is the
+only written definition of the crawler tables this API never reads
+(`SarkariWebsite`, `GoogleSearchQuery`, `CrawlRun`, `SearchKeywordGroup`) but
+sibling apps do.
 
-- **Response shapes.** The Node API wraps everything in `{ok: true, ...}`. This
-  service returns the resource directly and uses `{"error": {...}}` for
-  failures, so clients need updating.
-- **Sessions.** This service issues standard JWTs; Node issues a hand-rolled
-  HMAC token. Tokens do not validate across services, so users signing in here
-  are signed out there. API keys are shared — they live in the database.
+Two ways this service differs from the Node one it replaced, which matter to
+anything still pointed at the old contract:
+
+- **Response shapes.** The Node API wrapped everything in `{ok: true, ...}`.
+  This service returns the resource directly and uses `{"error": {...}}` for
+  failures.
+- **Sessions.** This service issues standard JWTs; Node issued a hand-rolled
+  HMAC token. Tokens never validated across the two. API keys are shared — they
+  live in the database.
 
 Endpoint paths also differ: `/api/v1/...` here versus `/v1/...` there. Set
 `API_V1_PREFIX=/v1` to match.

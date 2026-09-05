@@ -1,16 +1,3 @@
--- LOCAL VARIANT of sarkariworld-api/prisma/sql/0005_align_to_trimmed_schema.sql.
---
--- Identical to upstream except for the ArticleCategory re-homing CASE, which
--- upstream invites tuning ("change the CASE below to re-bucket differently").
--- Upstream sends both 'job' and 'exam' to latest_job; that would leave the
--- Result / Admit Card / Answer Key / Syllabus / Admission pages empty, since
--- every article for them currently sits in the legacy 'exam' bucket.
---
--- Here 'exam' is split on title keywords. Measured against the live 687 rows:
---   latest_job 38 | result 34 | syllabus 15 | admit_card 14
---   answer_key 10 | admission 7
--- Nothing is deleted; re-classifying later is a plain UPDATE.
-
 -- Align the live DB to the trimmed API schema (unified RBAC; no subscriber,
 -- email, notification, announcement or view-tracking surface).
 --
@@ -42,21 +29,7 @@ BEGIN
 			ALTER COLUMN "category" TYPE "ArticleCategory"
 			USING (
 				CASE
-					-- 'job' rows keep their meaning: straight to latest_job.
-					WHEN "category"::text = 'job' THEN 'latest_job'
-					-- The legacy 'exam' bucket spans five of the new categories.
-					-- Classify on the title; order matters, most specific first
-					-- ("... Answer Key Result" is an answer key, not a result).
-					WHEN "category"::text = 'exam' THEN
-						CASE
-							WHEN "title" ~* '(answer[ -]?key)' THEN 'answer_key'
-							WHEN "title" ~* '(admit[ -]?card|hall ticket|call letter)' THEN 'admit_card'
-							WHEN "title" ~* '(result|merit list|selection list|score ?card|pick up list|cut ?off)' THEN 'result'
-							WHEN "title" ~* '(syllabus|exam pattern|time table|schedule|calendar)' THEN 'syllabus'
-							WHEN "title" ~* '(admission|counsell?ing|entrance)' THEN 'admission'
-							-- No signal in the title: recruitment notice.
-							ELSE 'latest_job'
-						END
+					WHEN "category"::text IN ('job', 'exam') THEN 'latest_job'
 					ELSE "category"::text
 				END
 			)::"ArticleCategory";
