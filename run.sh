@@ -2,27 +2,38 @@
 # Development and deployment helpers. Run from the project root.
 set -euo pipefail
 
-WORKERS="${WORKERS:-4}"
+APP="sarkariworld.main:app"
+# Loopback by default: the app is only reachable from this machine, and the
+# reverse proxy in front of it is what the outside world talks to. Override
+# with HOST=0.0.0.0 only when the proxy lives on another host or in another
+# container, and make sure a firewall stands in front of it.
+HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8000}"
+WORKERS="${WORKERS:-4}"
 
 case "${1:-dev}" in
-  dev)   uv run uvicorn sarkariworld.main:app --reload --port "$PORT" ;;
+  dev)   uv run uvicorn "$APP" --reload --host "$HOST" --port "$PORT" ;;
 
-  # Production. No --reload. --proxy-headers makes the app trust the
-  # reverse proxy's X-Forwarded-* so client IPs and https:// are correct;
-  # restrict --forwarded-allow-ips to the proxy's address, never leave it
-  # open to the internet.
-  prod)  uv run uvicorn sarkariworld.main:app \
-           --host 0.0.0.0 \
+  # Production: no --reload, several workers, and X-Forwarded-* trusted only
+  # from the named proxy so client IPs and https:// are read correctly.
+  prod)  uv run uvicorn "$APP" \
+           --host "$HOST" \
            --port "$PORT" \
            --workers "$WORKERS" \
            --proxy-headers \
-           --forwarded-allow-ips "${PROXY_IPS:-127.0.0.1}" \
-           --no-access-log ;;
+           --forwarded-allow-ips "${PROXY_IPS:-127.0.0.1}" ;;
+
+  stop)  if pkill -f "uvicorn $APP"; then
+           echo "stopped"
+         else
+           echo "nothing running"
+         fi ;;
+
+  ps)    pgrep -fl "uvicorn $APP" || echo "nothing running" ;;
 
   test)  uv run pytest ;;
   it)    uv run pytest tests/integration ;;   # needs a database
   check) uv run ruff check . && uv run ruff format --check . && uv run mypy sarkariworld ;;
   fix)   uv run ruff check --fix . && uv run ruff format . ;;
-  *)     echo "usage: ./run.sh [dev|prod|test|it|check|fix]" >&2; exit 1 ;;
+  *)     echo "usage: ./run.sh [dev|prod|stop|ps|test|it|check|fix]" >&2; exit 1 ;;
 esac

@@ -15,7 +15,14 @@ cp .env.example .env   # set DATABASE_URL and SESSION_SECRET
 ```bash
 ./run.sh dev      # development, auto-reloads
 ./run.sh prod     # production, 4 workers, no reload
+./run.sh ps       # show running servers
+./run.sh stop     # stop them
 ```
+
+Both bind `127.0.0.1` by default, so the app is reachable only from this
+machine and the reverse proxy in front of it is what the outside world talks
+to. Set `HOST=0.0.0.0` only when the proxy runs on another host or in another
+container — and put a firewall in front of it.
 
 ### Production
 
@@ -36,6 +43,8 @@ total connections are `WORKERS x (DB_POOL_SIZE + DB_MAX_OVERFLOW)`. With the
 defaults that is `4 x 15 = 60`; Postgres `max_connections` is typically 100 and
 other clients need room too. Raising workers without lowering the pool will
 exhaust the server.
+
+`HOST`, `PORT`, `WORKERS` and `PROXY_IPS` are all environment overrides.
 
 Put a reverse proxy in front for TLS and rate limiting — rate limiting is
 deliberately not implemented in this service. `--proxy-headers` is on so
