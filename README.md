@@ -153,15 +153,15 @@ anything still pointed at the old contract:
   HMAC token. Tokens never validated across the two. API keys are shared — they
   live in the database.
 
-Endpoint paths also differ: `/api/v1/...` here versus `/v1/...` there. Set
-`API_V1_PREFIX=/v1` to match.
+Endpoint paths match: both serve under `/v1/...`. Override with
+`API_V1_PREFIX` if you need something else.
 
 ## Endpoints
 
 | Area | Routes |
 |---|---|
 | Ops | `GET /health`, `GET /health/db` |
-| Public | `GET /api/v1/category`, `/search`, `/{category}`, `/article/{slug}` |
+| Public | `GET /v1/category`, `/search`, `/{category}`, `/article/{slug}` |
 | Auth | `GET /auth/providers`, `/auth/me`, `POST /auth/logout`, `/auth/{provider}` |
 | Account | `GET /account/bookmarks`, `POST /account/bookmarks/toggle` |
 | Admin | `dashboard`, `meta`, `posts` (7), `users` (3), `web-urls` (5), `bookmarks` (2) |
@@ -174,14 +174,14 @@ catch-all cannot coexist with `/{category}`.
 ## Auth
 
 **People sign in with Google, and only Google.** There is no password login and
-no other provider — `POST /api/v1/auth/{provider}` 404s for anything else.
+no other provider — `POST /v1/auth/{provider}` 404s for anything else.
 A first sign-in creates the account at role `user`; signing in again never
 changes a role, so nobody can promote themselves.
 
 ### Roles
 
 `user` → `editor` → `admin`, changed only by an admin through
-`PATCH /api/v1/admin/users/{id}/role` (self-changes are refused, so the last
+`PATCH /v1/admin/users/{id}/role` (self-changes are refused, so the last
 admin cannot lock themselves out).
 
 | Role | Can |
@@ -199,8 +199,8 @@ under `/admin` inherits them rather than needing its own.
 Server-to-server callers (the content agent, CI) use `X-API-Key: sw_…`.
 
 ```bash
-POST   /api/v1/admin/users/{id}/api-key   # issue or rotate; admin only
-DELETE /api/v1/admin/users/{id}/api-key   # revoke
+POST   /v1/admin/users/{id}/api-key   # issue or rotate; admin only
+DELETE /v1/admin/users/{id}/api-key   # revoke
 ```
 
 - **Editors and admins only** — issuing one for a plain `user` is refused
