@@ -5,11 +5,20 @@ so no query is ever issued.
 """
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
-from src.config import settings
+from src.config import Settings, settings
+from src.main import create_app
 
 V1 = settings.api_v1_prefix
+
+
+def _client_for(config: Settings) -> AsyncClient:
+    """A client bound to an app built with the given settings."""
+    return AsyncClient(
+        transport=ASGITransport(app=create_app(config)), base_url="http://test"
+    )
+
 
 PROTECTED = [
     ("get", f"{V1}/account/bookmarks"),
