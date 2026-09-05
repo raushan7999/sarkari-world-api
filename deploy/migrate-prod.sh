@@ -13,10 +13,11 @@
 #   0005  11-value ArticleCategory, re-bucket 'exam', drop unused columns/tables
 #   0006  clear cover_image_url values that are Instagram links, not images
 #   0007  delete the newsletter-era 'subscription' accounts; default -> google
+#   0008  clear the legacy plaintext api_key; drop orphaned bookmark rows
 #
 # 0001..0004 came from the Node service verbatim; 0005 is adapted from its
-# counterpart (the original is kept at migrations/reference/). 0000, 0006 and
-# 0007 are specific to this database. See migrations/README.md.
+# counterpart (the original is kept at migrations/reference/). 0000, 0006,
+# 0007 and 0008 are specific to this database. See migrations/README.md.
 #
 # Override the target with DATABASE: DATABASE=sarkariworld_dev ./deploy/migrate-prod.sh
 set -euo pipefail
