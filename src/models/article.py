@@ -61,8 +61,8 @@ class Article(Base):
     meta_title: Mapped[str | None] = mapped_column(String(60), default=None)
     meta_description: Mapped[str | None] = mapped_column(String(160), default=None)
 
-    # Maintained by column DEFAULT expressions in Postgres. Mapped so the search
-    # query can reference them; never written from Python.
+    # GENERATED ALWAYS ... STORED in Postgres, so they refresh on every title
+    # change. Mapped so the search query can reference them; never written.
     title_search: Mapped[Any | None] = mapped_column(
         TSVECTOR, server_default=FetchedValue()
     )
