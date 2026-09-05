@@ -17,11 +17,11 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
-from src.db.session import async_session_factory, check_connection
-from src.main import create_app
-from src.models.enums import UserRole
-from src.models.user import User
-from src.services.tokens import mint_session_token
+from sarkariworld.db.session import async_session_factory, check_connection
+from sarkariworld.main import create_app
+from sarkariworld.models.enums import UserRole
+from sarkariworld.models.user import User
+from sarkariworld.services.tokens import mint_session_token
 
 # Cached so the reachability probe runs once per session even though the
 # fixture is function-scoped (pytest-asyncio ties fixture scope to loop scope).

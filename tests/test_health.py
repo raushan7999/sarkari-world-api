@@ -1,7 +1,7 @@
 from httpx import AsyncClient
 
-from src.config import settings
-from src.constants import REQUEST_ID_HEADER
+from sarkariworld.config import settings
+from sarkariworld.constants import REQUEST_ID_HEADER
 
 
 async def test_health_returns_ok(client: AsyncClient) -> None:

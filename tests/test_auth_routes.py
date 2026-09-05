@@ -7,7 +7,7 @@ is lazy.
 
 from httpx import AsyncClient
 
-from src.config import settings
+from sarkariworld.config import settings
 
 V1 = settings.api_v1_prefix
 

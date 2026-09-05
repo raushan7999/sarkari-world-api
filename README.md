@@ -13,7 +13,7 @@ cp .env.example .env   # set DATABASE_URL and SESSION_SECRET
 ## Run
 
 ```bash
-uv run uvicorn src.main:app --reload
+uv run uvicorn sarkariworld.main:app --reload
 ```
 
 ## API docs
@@ -35,7 +35,7 @@ summary, description and typed response model.
 uv run pytest        # 88 tests (58 unit + 30 integration)
 uv run ruff check .
 uv run ruff format .
-uv run mypy src      # strict
+uv run mypy sarkariworld      # strict
 ```
 
 `tests/integration/` runs against a real database and is **skipped
@@ -46,7 +46,7 @@ write, so they are safe against a developer database.
 ## Layout
 
 ```
-src/
+sarkariworld/
 ├── main.py               create_app() factory + lifespan
 ├── dependencies.py       DB session + auth guards
 ├── exceptions.py         AppError hierarchy + handlers
