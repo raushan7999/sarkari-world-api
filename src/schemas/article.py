@@ -165,6 +165,46 @@ class ArticleStatusUpdate(BaseModel):
     status: ArticleStatus
 
 
+class SitemapEntry(BaseModel):
+    """One published article, reduced to what a sitemap actually needs.
+
+    Deliberately not an `ArticleCard`: a sitemap needs a URL and a modification
+    date, and nothing else. Sending descriptions and cover images for every
+    article turns a 55 KB response into a megabyte.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    slug: str
+    category: CategorySlug
+    published_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _slugify_category(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("category"):
+            return {**data, "category": str(data["category"]).replace("_", "-")}
+        return data
+
+    @field_serializer("published_at", "updated_at")
+    def _ist(self, value: datetime | None) -> str | None:
+        return to_ist_iso(value)
+
+
+class SitemapResponse(BaseModel):
+    """Every published article, for sitemap generation.
+
+    `truncated` is the honest signal that `SITEMAP_MAX_ROWS` was reached, so a
+    client can say so loudly instead of quietly publishing a partial sitemap —
+    which is exactly how 191 articles went missing from the index once already.
+    """
+
+    total: int
+    truncated: bool = False
+    articles: list[SitemapEntry]
+
+
 class CategoryItem(BaseModel):
     slug: str
     name: str

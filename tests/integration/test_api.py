@@ -74,6 +74,49 @@ class TestPublic:
         response = await api.get(f"{V1}/not-a-category")
         assert response.status_code == 404
 
+    async def test_sitemap_lists_every_published_article(
+        self, api: AsyncClient
+    ) -> None:
+        body = (await api.get(f"{V1}/sitemap")).json()
+
+        assert body["total"] > 0
+        assert body["truncated"] is False
+        # The whole catalogue in one response is the point of the endpoint --
+        # a client should never have to page it.
+        assert len(body["articles"]) == body["total"]
+
+    async def test_sitemap_carries_only_what_a_sitemap_needs(
+        self, api: AsyncClient
+    ) -> None:
+        entry = (await api.get(f"{V1}/sitemap")).json()["articles"][0]
+
+        assert set(entry) == {"slug", "category", "published_at", "updated_at"}
+        assert "-" in entry["category"] or entry["category"].isalpha()
+        assert "_" not in entry["category"]
+
+    async def test_sitemap_agrees_with_the_category_listings(
+        self, api: AsyncClient
+    ) -> None:
+        """The old sitemap paged every category; this must not lose anyone."""
+        listed: set[str] = set()
+        for slug in (await api.get(f"{V1}/category")).json():
+            page = 1
+            while True:
+                body = (
+                    await api.get(
+                        f"{V1}/{slug['slug']}", params={"page": page, "per_page": 50}
+                    )
+                ).json()
+                listed.update(a["slug"] for a in body["articles"])
+                if not body["has_more"]:
+                    break
+                page += 1
+
+        from_sitemap = {
+            a["slug"] for a in (await api.get(f"{V1}/sitemap")).json()["articles"]
+        }
+        assert from_sitemap == listed
+
     async def test_search_finds_by_title(self, api: AsyncClient) -> None:
         response = await api.get(f"{V1}/search", params={"q": "recruitment"})
 

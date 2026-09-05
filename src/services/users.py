@@ -87,7 +87,9 @@ def build_user_list_query(
         )
     if role is not None:
         statement = statement.where(User.role == role)
-    return statement.order_by(User.created_at.desc())
+    # Unique tiebreaker: `created_at` collides for users created in the same
+    # transaction, and paged results must not repeat or drop rows.
+    return statement.order_by(User.created_at.desc(), User.id.desc())
 
 
 async def list_users(

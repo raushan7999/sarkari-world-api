@@ -15,6 +15,7 @@ from src.constants.article import (
     CATEGORY_LABELS,
     CATEGORY_SLUGS,
     SEARCH_QUERY_MAX,
+    SITEMAP_MAX_ROWS,
 )
 from src.dependencies import SessionDep
 from src.exceptions import NotFoundError
@@ -24,6 +25,8 @@ from src.schemas.article import (
     CategoryPage,
     PublicArticle,
     SearchResponse,
+    SitemapEntry,
+    SitemapResponse,
 )
 from src.schemas.common import PUBLIC_RESPONSES
 from src.schemas.pagination import public_page_params
@@ -56,6 +59,27 @@ async def search(
         query=q.strip(),
         total=len(rows),
         articles=[ArticleCard.model_validate(row) for row in rows],
+    )
+
+
+@router.get("/sitemap", summary="Every published article, for sitemap builds")
+async def sitemap(session: SessionDep) -> SitemapResponse:
+    """Slug and dates for every published article, newest first.
+
+    One request instead of paging the whole catalogue category by category, and
+    four columns instead of whole article cards — a sitemap needs a URL and a
+    modification date, nothing more.
+
+    Capped at `SITEMAP_MAX_ROWS`, which is the sitemaps protocol's own 50,000
+    URL limit. `truncated` says whether the cap was hit, so a client can fail
+    loudly rather than publish a partial sitemap and never notice.
+    """
+    rows = await articles.list_for_sitemap(session, limit=SITEMAP_MAX_ROWS)
+    total = await articles.count_published(session)
+    return SitemapResponse(
+        total=total,
+        truncated=total > len(rows),
+        articles=[SitemapEntry.model_validate(row) for row in rows],
     )
 
 

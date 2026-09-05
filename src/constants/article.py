@@ -36,6 +36,10 @@ PUBLIC_PAGE_SIZE_MAX = 50
 ADMIN_PAGE_SIZE = 24
 ADMIN_PAGE_SIZE_MAX = 100
 MAX_LIST_PAGE = 1000
+# Ceiling on `GET /v1/sitemap`. The sitemaps protocol allows 50,000 URLs per
+# file, so a client that reaches this needs a sitemap index rather than a
+# bigger response; the endpoint reports `truncated` so it can tell.
+SITEMAP_MAX_ROWS = 50_000
 
 # Input caps, enforced by both the Pydantic schemas and the payload normalisers.
 SEARCH_QUERY_MIN = 2

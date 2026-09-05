@@ -13,7 +13,11 @@ from typing import Any
 from sqlalchemy import Select, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.constants.article import SEARCH_QUERY_MAX, SEARCH_RESULT_MAX
+from src.constants.article import (
+    SEARCH_QUERY_MAX,
+    SEARCH_RESULT_MAX,
+    SITEMAP_MAX_ROWS,
+)
 from src.models.article import Article
 from src.models.enums import ArticleCategory, ArticleStatus
 from src.utils.dates import ist_day_bounds, now_ist
@@ -130,11 +134,60 @@ async def find_category_page(
 
     total = await session.scalar(select(func.count()).select_from(statement.subquery()))
     result = await session.execute(
-        statement.order_by(Article.published_at.desc().nulls_last())
+        # `published_at` is not unique -- many articles share a timestamp to
+        # the second -- so `id` breaks the tie. Without it, paging can repeat
+        # one article on two pages and silently skip another.
+        statement.order_by(Article.published_at.desc().nulls_last(), Article.id.desc())
         .limit(limit)
         .offset(offset)
     )
     return list(result.scalars().all()), int(total or 0)
+
+
+async def list_for_sitemap(
+    session: AsyncSession, limit: int = SITEMAP_MAX_ROWS
+) -> list[dict[str, Any]]:
+    """Every published article as `{slug, category, published_at, updated_at}`.
+
+    Four columns, not whole rows: a sitemap needs a URL and a modification date,
+    and selecting `description` and `html_content` for the whole catalogue to
+    throw them away is most of the cost of building one.
+
+    Newest first, so a client that does hit the limit keeps the articles most
+    worth having in the index.
+    """
+    result = await session.execute(
+        select(
+            Article.slug,
+            Article.category,
+            Article.published_at,
+            Article.updated_at,
+        )
+        .where(Article.article_status == ArticleStatus.PUBLISHED)
+        .order_by(Article.published_at.desc().nulls_last(), Article.id.desc())
+        .limit(limit)
+    )
+    return [
+        {
+            "slug": row.slug,
+            "category": category_enum_to_slug(row.category),
+            "published_at": row.published_at,
+            "updated_at": row.updated_at,
+        }
+        for row in result
+    ]
+
+
+async def count_published(session: AsyncSession) -> int:
+    """Total published articles, so the sitemap route can report truncation."""
+    return int(
+        await session.scalar(
+            select(func.count())
+            .select_from(Article)
+            .where(Article.article_status == ArticleStatus.PUBLISHED)
+        )
+        or 0
+    )
 
 
 # --- Admin -------------------------------------------------------------------
@@ -190,14 +243,16 @@ async def find_for_admin_page(
 
     total = await session.scalar(select(func.count()).select_from(statement.subquery()))
     result = await session.execute(
-        statement.order_by(column.desc()).limit(limit).offset(offset)
+        statement.order_by(column.desc(), Article.id.desc()).limit(limit).offset(offset)
     )
     return list(result.scalars().all()), int(total or 0)
 
 
 async def find_recent_for_admin(session: AsyncSession, limit: int) -> list[Article]:
     result = await session.execute(
-        select(Article).order_by(Article.created_at.desc()).limit(limit)
+        select(Article)
+        .order_by(Article.created_at.desc(), Article.id.desc())
+        .limit(limit)
     )
     return list(result.scalars().all())
 

@@ -31,7 +31,7 @@ async def list_by_user(
         select(Bookmark, Article)
         .outerjoin(Article, Article.id == Bookmark.article_id)
         .where(Bookmark.user_id == user_id)
-        .order_by(Bookmark.created_at.desc())
+        .order_by(Bookmark.created_at.desc(), Bookmark.id.desc())
         .limit(params.per_page)
         .offset(params.offset)
     )
@@ -161,7 +161,7 @@ async def list_all(
 
     total = await session.scalar(select(func.count()).select_from(statement.subquery()))
     result = await session.execute(
-        statement.order_by(Bookmark.created_at.desc())
+        statement.order_by(Bookmark.created_at.desc(), Bookmark.id.desc())
         .limit(params.per_page)
         .offset(params.offset)
     )
