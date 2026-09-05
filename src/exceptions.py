@@ -41,7 +41,13 @@ class ConflictError(AppError):
 class UnauthorizedError(AppError):
     status_code = status.HTTP_401_UNAUTHORIZED
     code = "unauthorized"
-    message = "Not authenticated"
+    message = "Login required."
+
+
+class ForbiddenError(AppError):
+    status_code = status.HTTP_403_FORBIDDEN
+    code = "forbidden"
+    message = "Insufficient permissions."
 
 
 def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
@@ -69,7 +75,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         _: Request, exc: RequestValidationError
     ) -> JSONResponse:
         return _error_response(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "validation_error",
             "Request validation failed",
         )
