@@ -218,6 +218,58 @@ class TestAdminReads:
         # Never-viewed rows surface first so nothing sits unseen.
         assert stamps == sorted(stamps, key=lambda s: (s is not None, s or ""))
 
+    async def test_web_urls_newest_first_puts_unviewed_last(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        body = (
+            await api.get(
+                f"{V1}/admin/web-urls",
+                headers=admin_headers,
+                params={"sort": "newest", "per_page": 20},
+            )
+        ).json()
+        stamps = [row["last_viewed_at"] for row in body["items"]]
+        # Most recently viewed first, never-viewed at the back.
+        seen = [s for s in stamps if s is not None]
+        assert seen == sorted(seen, reverse=True)
+        assert stamps[: len(seen)] == seen
+
+    async def test_web_urls_viewed_filter_splits_the_backlog(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        async def fetch(viewed: str) -> dict:
+            return (
+                await api.get(
+                    f"{V1}/admin/web-urls",
+                    headers=admin_headers,
+                    params={"viewed": viewed, "per_page": 100},
+                )
+            ).json()
+
+        every, seen, unseen = await fetch("all"), await fetch("yes"), await fetch("no")
+
+        assert all(r["last_viewed_at"] is not None for r in seen["items"])
+        assert all(r["last_viewed_at"] is None for r in unseen["items"])
+        # The filter runs in SQL, so `total` describes the filtered set rather
+        # than the whole table — that is the whole point of moving it there.
+        assert seen["total"] + unseen["total"] == every["total"]
+
+    async def test_web_urls_not_viewed_since_keeps_the_never_viewed(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        today = now_ist().strftime("%Y-%m-%d")
+        body = (
+            await api.get(
+                f"{V1}/admin/web-urls",
+                headers=admin_headers,
+                params={"not_viewed_since": today, "per_page": 100},
+            )
+        ).json()
+        cutoff = f"{today}T00:00:00"
+        for row in body["items"]:
+            # Nothing is staler than never, so NULLs always survive the cutoff.
+            assert row["last_viewed_at"] is None or row["last_viewed_at"] < cutoff
+
 
 class TestArticleLifecycle:
     SLUG = "pytest-lifecycle-article"

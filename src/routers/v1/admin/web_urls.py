@@ -24,12 +24,28 @@ async def list_web_urls(
     q: Annotated[str | None, Query(max_length=200)] = None,
     # Defaults to `oldest` so never-viewed rows surface first.
     sort: Annotated[Literal["oldest", "newest"], Query()] = "oldest",
+    viewed: Annotated[Literal["all", "yes", "no"], Query()] = "all",
+    not_viewed_since: Annotated[
+        str | None, Query(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    ] = None,
     page: Annotated[int | None, Query(ge=1)] = None,
     per_page: Annotated[int | None, Query(ge=1)] = None,
 ) -> AdminPage[WebUrlRead]:
-    """The triage list. Unviewed URLs sort first by default."""
+    """The triage list. Unviewed URLs sort first by default.
+
+    `viewed` splits the backlog into seen and unseen; `not_viewed_since` takes
+    an IST calendar day and keeps rows last viewed before it, plus every row
+    never viewed at all. The two compose.
+    """
     params = admin_page_params(page, per_page)
-    rows, total = await web_urls.list_urls(session, query=q, sort=sort, params=params)
+    rows, total = await web_urls.list_urls(
+        session,
+        query=q,
+        sort=sort,
+        viewed=viewed,
+        not_viewed_since=not_viewed_since,
+        params=params,
+    )
     return AdminPage[WebUrlRead].build(
         [WebUrlRead.model_validate(row) for row in rows], total, params
     )
