@@ -59,14 +59,21 @@ async def list_urls(
             or_(WebUrl.last_viewed_at.is_(None), WebUrl.last_viewed_at < cutoff)
         )
 
+    # Most rows have never been viewed, so `last_viewed_at` is the same NULL
+    # for the bulk of the table and decides almost nothing on its own. `domain`
+    # used to break those ties, which made the majority of the list alphabetical
+    # -- indistinguishable from having no sort at all. Recency of *addition* is
+    # the meaningful second key: newest-added first when sorting newest,
+    # longest-waiting first when sorting oldest. `id` stays last so paging over
+    # rows sharing a timestamp is still stable.
     if sort == "newest":
-        order = WebUrl.last_viewed_at.desc().nulls_last()
+        order = [WebUrl.last_viewed_at.desc().nulls_last(), WebUrl.created_at.desc()]
     else:
-        order = WebUrl.last_viewed_at.asc().nulls_first()
+        order = [WebUrl.last_viewed_at.asc().nulls_first(), WebUrl.created_at.asc()]
 
     total = await session.scalar(select(func.count()).select_from(statement.subquery()))
     result = await session.execute(
-        statement.order_by(order, WebUrl.domain.asc(), WebUrl.id.asc())
+        statement.order_by(*order, WebUrl.id.asc())
         .limit(params.per_page)
         .offset(params.offset)
     )
