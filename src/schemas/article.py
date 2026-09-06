@@ -82,6 +82,19 @@ class PublicArticle(ArticleCard):
     author_name: str | None = None
 
 
+class AdminArticleCard(ArticleCard):
+    """List shape for the console.
+
+    `ArticleCard` has no `article_status` on purpose: it is the *public*
+    listing shape, where every row is published by definition. The console
+    lists every status at once and colours a badge from this field, so serving
+    it `ArticleCard` left that badge — and every decision made from it —
+    reading `undefined`.
+    """
+
+    article_status: ArticleStatus
+
+
 class AdminArticle(PublicArticle):
     """Adds the workflow and authorship fields hidden from the public."""
 

@@ -314,6 +314,86 @@ class TestArticleLifecycle:
         assert body["description"] == "keep me"
         assert body["search_keyword"] == ["alpha"]
 
+    async def test_editing_content_moves_updated_at(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        created = (
+            await api.post(
+                f"{V1}/admin/posts",
+                headers=admin_headers,
+                json={"title": "Before", "slug": self.SLUG, "category": "blog"},
+            )
+        ).json()
+
+        edited = (
+            await api.put(
+                f"{V1}/admin/posts/{self.SLUG}",
+                headers=admin_headers,
+                json={"html_content": "<p>a correction</p>"},
+            )
+        ).json()
+
+        # The sitemap publishes this as `lastmod`, so a correction to a live
+        # article has to move it. It never did: the column had no writer.
+        assert edited["updated_at"] > created["updated_at"]
+
+    async def test_saving_an_unchanged_article_does_not(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        created = (
+            await api.post(
+                f"{V1}/admin/posts",
+                headers=admin_headers,
+                json={
+                    "title": "Same",
+                    "slug": self.SLUG,
+                    "category": "blog",
+                    "description": "unchanged",
+                },
+            )
+        ).json()
+
+        resaved = (
+            await api.put(
+                f"{V1}/admin/posts/{self.SLUG}",
+                headers=admin_headers,
+                json={"title": "Same", "description": "unchanged"},
+            )
+        ).json()
+
+        # Opening the editor and pressing Save is not an edit. Stamping it
+        # would put a false date in front of a crawler.
+        assert resaved["updated_at"] == created["updated_at"]
+
+    async def test_the_list_carries_the_status(
+        self, api: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
+        await api.post(
+            f"{V1}/admin/posts",
+            headers=admin_headers,
+            json={"title": "L", "slug": self.SLUG, "category": "blog"},
+        )
+
+        # The console colours a badge and decides which row actions to offer
+        # from this field. Serving the public card shape left it absent, so
+        # every row rendered as statusless and every row offered "Publish".
+        listed = (
+            await api.get(
+                f"{V1}/admin/posts",
+                headers=admin_headers,
+                params={"q": self.SLUG, "per_page": 5},
+            )
+        ).json()
+        row = next(i for i in listed["items"] if i["slug"] == self.SLUG)
+        assert row["article_status"] == "draft"
+
+        recent = (
+            await api.get(
+                f"{V1}/admin/posts/recent", headers=admin_headers, params={"limit": 100}
+            )
+        ).json()
+        assert all("article_status" in r for r in recent)
+
     async def test_duplicate_slug_conflicts(
         self, api: AsyncClient, admin_headers: dict[str, str]
     ) -> None:

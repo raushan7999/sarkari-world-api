@@ -42,8 +42,10 @@ class Article(Base):
     )
     published_at: Mapped[datetime | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    # Deliberately NOT auto-updated: the Node service never writes this column
-    # and there is no trigger. Adding onupdate here would be a behaviour change.
+    # No `onupdate` and no trigger: the write is explicit, in
+    # `services.articles.update`, so it can be conditional on something having
+    # actually changed. `onupdate` would fire on every flush that touched the
+    # row, including one that set every column to the value it already held.
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     # Loose reference to User.id, which is an Int. Stored as text by the source

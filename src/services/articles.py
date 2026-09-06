@@ -404,8 +404,23 @@ async def create(session: AsyncSession, data: dict[str, Any]) -> Article:
 async def update(
     session: AsyncSession, article: Article, data: dict[str, Any]
 ) -> Article:
+    """Apply a partial update, stamping `updated_at` if anything moved.
+
+    The column has no `onupdate` and no database trigger, so until now nothing
+    ever wrote it: an article edited a dozen times still reported the timestamp
+    it was created with.
+
+    The stamp is conditional on a *net* change, not on a request arriving.
+    `session.is_modified` compares each attribute against its loaded value, so
+    opening the editor and pressing Save without touching anything leaves the
+    date alone. That distinction matters beyond tidiness: the sitemap publishes
+    this column as `lastmod`, and a date that moves without the content moving
+    is exactly the signal that teaches Google to stop trusting the file.
+    """
     for field, value in data.items():
         setattr(article, field, value)
+    if session.is_modified(article):
+        article.updated_at = now_ist()
     await session.commit()
     await session.refresh(article)
     return article
@@ -414,10 +429,16 @@ async def update(
 async def set_status(
     session: AsyncSession, article: Article, status: ArticleStatus, *, now: datetime
 ) -> Article:
-    """Change workflow status, stamping `published_at` on first publish."""
+    """Change workflow status, stamping `published_at` on first publish.
+
+    A no-op transition — setting `published` on something already published —
+    changes nothing, so it stamps nothing.
+    """
     article.article_status = status
     if status is ArticleStatus.PUBLISHED and article.published_at is None:
         article.published_at = now
+    if session.is_modified(article):
+        article.updated_at = now
     await session.commit()
     await session.refresh(article)
     return article

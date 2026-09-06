@@ -10,7 +10,7 @@ from src.exceptions import ConflictError, NotFoundError
 from src.models.enums import ArticleStatus
 from src.schemas.article import (
     AdminArticle,
-    ArticleCard,
+    AdminArticleCard,
     ArticleCreate,
     ArticlePublish,
     ArticleStatusUpdate,
@@ -39,7 +39,7 @@ async def list_posts(
     date_to: Annotated[str | None, Query(pattern=r"^\d{4}-\d{2}-\d{2}$")] = None,
     page: Annotated[int | None, Query(ge=1)] = None,
     per_page: Annotated[int | None, Query(ge=1)] = None,
-) -> AdminPage[ArticleCard]:
+) -> AdminPage[AdminArticleCard]:
     """Filtered listing across every status.
 
     `category` takes a public hyphen slug and is converted before querying —
@@ -58,8 +58,8 @@ async def list_posts(
         limit=params.per_page,
         offset=params.offset,
     )
-    return AdminPage[ArticleCard].build(
-        [ArticleCard.model_validate(row) for row in rows], total, params
+    return AdminPage[AdminArticleCard].build(
+        [AdminArticleCard.model_validate(row) for row in rows], total, params
     )
 
 
@@ -67,10 +67,10 @@ async def list_posts(
 async def recent_posts(
     session: SessionDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
-) -> list[ArticleCard]:
+) -> list[AdminArticleCard]:
     """Newest articles regardless of status. Declared before `/{slug}`."""
     rows = await articles.find_recent_for_admin(session, limit)
-    return [ArticleCard.model_validate(row) for row in rows]
+    return [AdminArticleCard.model_validate(row) for row in rows]
 
 
 @router.get("/{slug}", summary="Get an article")
